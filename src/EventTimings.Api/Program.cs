@@ -17,8 +17,31 @@ builder.Services.AddCors(options =>
 });
 builder.Services.AddDbContextFactory<EventTimingsDbContext>(options =>
 {
-    var connectionString = builder.Configuration.GetConnectionString("EventTimingsDb") ?? "Data Source=eventtimings.db";
-    options.UseSqlite(connectionString);
+    var connectionString = builder.Configuration.GetConnectionString("EventTimingsDb");
+    var configuredProvider = builder.Configuration["DatabaseProvider"];
+    var useSqlServer = string.Equals(configuredProvider, "SqlServer", StringComparison.OrdinalIgnoreCase)
+        || (!string.IsNullOrWhiteSpace(connectionString)
+            && (connectionString.Contains("Server=tcp:", StringComparison.OrdinalIgnoreCase)
+                || connectionString.Contains("Authentication=", StringComparison.OrdinalIgnoreCase)));
+
+    if (!useSqlServer)
+    {
+        if (string.IsNullOrWhiteSpace(connectionString)
+            || !connectionString.StartsWith("Data Source=", StringComparison.OrdinalIgnoreCase))
+        {
+            connectionString = "Data Source=eventtimings.db";
+        }
+
+        options.UseSqlite(connectionString);
+        return;
+    }
+
+    if (string.IsNullOrWhiteSpace(connectionString))
+    {
+        throw new InvalidOperationException("The EventTimingsDb connection string must be configured when DatabaseProvider is SqlServer.");
+    }
+
+    options.UseSqlServer(connectionString, sqlOptions => sqlOptions.EnableRetryOnFailure());
 });
 builder.Services.AddSingleton<TimingStore>();
 
@@ -29,7 +52,10 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
-app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 app.UseCors("client");
 
 app.MapGet("/api/event/current", (TimingStore store) => Results.Ok(store.GetSnapshot()))

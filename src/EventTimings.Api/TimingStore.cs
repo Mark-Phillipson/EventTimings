@@ -733,8 +733,14 @@ internal sealed class TimingStore
         lock (syncRoot)
         {
             using var dbContext = dbContextFactory.CreateDbContext();
-            dbContext.Database.EnsureCreated();
-            ApplySchemaUpdates(dbContext);
+            if (dbContext.Database.IsSqlite())
+            {
+                dbContext.Database.EnsureCreated();
+            }
+            else
+            {
+                dbContext.Database.Migrate();
+            }
 
             if (!dbContext.RouteTypes.Any())
             {
@@ -879,13 +885,6 @@ internal sealed class TimingStore
         }
 
         return null;
-    }
-
-    private static void ApplySchemaUpdates(EventTimingsDbContext dbContext)
-    {
-        // Add new nullable columns to the Riders table; silently ignored if they already exist.
-        try { dbContext.Database.ExecuteSqlRaw("ALTER TABLE Riders ADD COLUMN Email TEXT"); } catch { }
-        try { dbContext.Database.ExecuteSqlRaw("ALTER TABLE Riders ADD COLUMN Phone TEXT"); } catch { }
     }
 
     public ImportResults ImportRiderContacts(IEnumerable<RiderContactImportDto> contacts)
