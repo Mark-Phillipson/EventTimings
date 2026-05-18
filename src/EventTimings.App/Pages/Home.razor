@@ -92,10 +92,6 @@ else
 	</section>
 
 	<section class="panel">
-		<AddParticipantForm OnParticipantAdded="OnParticipantAdded" />
-	</section>
-
-	<section class="panel">
 		<WaveManagement AllRiders="currentEvent.Riders" OnWaveStarted="OnWaveStarted" />
 	</section>
 
@@ -297,13 +293,6 @@ else
 			rider.FullName.Contains(riderSearchText, StringComparison.OrdinalIgnoreCase) ||
 			rider.Category.Contains(riderSearchText, StringComparison.OrdinalIgnoreCase))
 		?? Array.Empty<RiderSummary>();
-
-	private void OnParticipantAdded(EventSnapshot snapshot)
-	{
-		currentEvent = snapshot;
-		statusMessage = "Participant added successfully.";
-		currentPage = 0; // Reset to first page
-	}
 
 	private async Task OnWaveStarted(WaveStartResult result)
 	{
