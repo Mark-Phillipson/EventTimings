@@ -1,11 +1,11 @@
 using System.Net.Http.Json;
+using System.Text.Json;
 using EventTimings.Contracts;
-using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.Configuration;
 
 namespace EventTimings.App.Services;
 
-public sealed class EventTimingApiClient(NavigationManager navigationManager, IConfiguration configuration)
+public sealed class EventTimingApiClient(IConfiguration configuration)
 {
     public Task<EventSnapshot?> GetCurrentEventAsync(CancellationToken cancellationToken = default) =>
         SendWithFallbackAsync(client => client.GetFromJsonAsync<EventSnapshot>("api/event/current", cancellationToken), cancellationToken);
@@ -20,6 +20,7 @@ public sealed class EventTimingApiClient(NavigationManager navigationManager, IC
         SendWithFallbackAsync(async client =>
         {
             using var response = await client.PostAsJsonAsync(route, request, cancellationToken);
+            response.EnsureSuccessStatusCode();
             return await response.Content.ReadFromJsonAsync<TimingCommandResult>(cancellationToken);
         }, cancellationToken);
 
@@ -41,6 +42,14 @@ public sealed class EventTimingApiClient(NavigationManager navigationManager, IC
             {
                 continue;
             }
+            catch (JsonException)
+            {
+                continue;
+            }
+            catch (NotSupportedException)
+            {
+                continue;
+            }
             catch (TaskCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 throw;
@@ -56,13 +65,11 @@ public sealed class EventTimingApiClient(NavigationManager navigationManager, IC
 
     private IEnumerable<Uri> GetCandidateBaseAddresses()
     {
-        var candidateUrls = new[]
-        {
-            navigationManager.BaseUri,
-            configuration["ApiBaseUrl"],
-            "http://localhost:5038/",
-            "https://localhost:7290/"
-        };
+        var candidateUrls = configuration
+            .GetSection("ApiBaseUrls")
+            .GetChildren()
+            .Select(item => item.Value)
+            .Append(configuration["ApiBaseUrl"]);
 
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -73,9 +80,16 @@ public sealed class EventTimingApiClient(NavigationManager navigationManager, IC
                 continue;
             }
 
-            if (seen.Add(candidateUrl))
+            var normalizedUrl = candidateUrl.EndsWith("/", StringComparison.Ordinal) ? candidateUrl : $"{candidateUrl}/";
+
+            if (!Uri.TryCreate(normalizedUrl, UriKind.Absolute, out var parsedUri))
             {
-                yield return new Uri(candidateUrl, UriKind.Absolute);
+                continue;
+            }
+
+            if (seen.Add(parsedUri.AbsoluteUri))
+            {
+                yield return parsedUri;
             }
         }
     }
