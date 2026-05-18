@@ -57,6 +57,8 @@ if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 }
 app.UseCors("client");
+app.UseBlazorFrameworkFiles();
+app.UseStaticFiles();
 
 app.MapGet("/api/event/current", (TimingStore store) => Results.Ok(store.GetSnapshot()))
     .WithName("GetCurrentEvent");
@@ -301,5 +303,7 @@ static string FormatElapsed(long? elapsedSeconds)
 
     return TimeSpan.FromSeconds(elapsedSeconds.Value).ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
 }
+
+app.MapFallbackToFile("index.html");
 
 app.Run();

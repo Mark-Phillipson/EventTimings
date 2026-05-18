@@ -1,0 +1,35 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environmentName": {
+      "value": "dev"
+    },
+    "location": {
+      "value": "westeurope"
+    },
+    "appServicePlanSkuName": {
+      "value": "B1"
+    },
+    "sqlDatabaseSkuName": {
+      "value": "Basic"
+    },
+    "sqlAdminObjectId": {
+      "value": "62675810-118c-430d-80bc-4099ac689771"
+    },
+    "sqlAdminLogin": {
+      "value": "mphillipson0_gmail.com#EXT#@mphillipson0gmail.onmicrosoft.com"
+    },
+    "corsAllowedOrigins": {
+      "value": [
+        "http://localhost:5127"
+      ]
+    },
+    "tags": {
+      "value": {
+        "app": "EventTimings",
+        "environment": "dev"
+      }
+    }
+  }
+}

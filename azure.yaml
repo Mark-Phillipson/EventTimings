@@ -1,0 +1,12 @@
+name: EventTimings
+infra:
+  provider: bicep
+  path: infra
+services:
+  api:
+    project: ./src/EventTimings.Api
+    host: appservice
+    language: dotnet
+    dist: .
+pipeline:
+  provider: github
