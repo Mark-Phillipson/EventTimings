@@ -997,9 +997,9 @@ internal sealed class TimingStore
 
         return new EventSnapshot(
             EventCode,
-            "SFA Sportive 2025",
+            "SFA Sportive 2026",
             "Marden Railway Station, TN12 9DR",
-            new DateOnly(2025, 5, 11),
+            new DateOnly(2026, 5, 24),
             status,
             riders,
             timingSessions.OrderByDescending(session => session.StartedAt).ToArray(),
