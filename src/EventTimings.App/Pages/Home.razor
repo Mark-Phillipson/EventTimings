@@ -50,18 +50,43 @@ else
 		<div>
 			<h2>Rider timing</h2>
 			<label>
+				<span>Search rider</span>
+				<input @bind="riderSearchText" @bind:event="oninput" placeholder="Type a bib number, name, or category" />
+			</label>
+			<label>
 				<span>Select rider to time</span>
 				<select @bind="selectedRiderId">
-					@foreach (var rider in currentEvent.Riders)
+					@foreach (var rider in FilteredRiders)
 					{
 						<option value="@rider.RiderId">@rider.BibNumber · @rider.FullName · @rider.Category</option>
 					}
 				</select>
 			</label>
+			<p class="muted rider-count">@FilteredRiders.Count() of @currentEvent.Riders.Count riders shown</p>
 
 			<div class="action-row">
-				<button class="primary-action" @onclick="StartTiming">Start</button>
-				<button class="secondary-action" @onclick="StopTiming">Stop</button>
+				<button class="primary-action" type="button" disabled="@(activeAction is not TimingAction.None)" @onclick="StartTiming">
+					@if (activeAction == TimingAction.Start)
+					{
+						<span class="spinner-border spinner-border-sm button-spinner" role="status" aria-hidden="true"></span>
+						<span>Start</span>
+					}
+					else
+					{
+						<span>Start</span>
+					}
+				</button>
+				<button class="secondary-action" type="button" disabled="@(activeAction is not TimingAction.None)" @onclick="StopTiming">
+					@if (activeAction == TimingAction.Stop)
+					{
+						<span class="spinner-border spinner-border-sm button-spinner" role="status" aria-hidden="true"></span>
+						<span>Stop</span>
+					}
+					else
+					{
+						<span>Stop</span>
+					}
+				</button>
 			</div>
 		</div>
 	</section>
@@ -111,9 +136,11 @@ else
 	private EventSnapshot? currentEvent;
 	private string officialName = "Mark Phillipson";
 	private string pin = "2468";
+	private string riderSearchText = string.Empty;
 	private string selectedRiderId = string.Empty;
 	private string? statusMessage;
 	private bool apiReachable = true;
+	private TimingAction activeAction = TimingAction.None;
 
 	protected override async Task OnInitializedAsync()
 	{
@@ -127,6 +154,9 @@ else
 			return;
 		}
 
+		activeAction = TimingAction.Start;
+		StateHasChanged();
+
 		try
 		{
 			var result = await ApiClient.StartTimingAsync(new TimingCommandRequest(currentEvent.EventCode, officialName, pin, selectedRiderId));
@@ -134,11 +164,15 @@ else
 			statusMessage = result?.Message ?? "Unable to reach the timing API.";
 			currentEvent = result?.Snapshot ?? currentEvent;
 		}
-		catch (Exception ex)
+		catch (Exception)
 		{
 			apiReachable = false;
 			ApplyLocalStart();
-			statusMessage = $"Timing API is unavailable, so this start was recorded locally. {ex.Message}";
+			statusMessage = "Timing API is unavailable, so this start was recorded locally.";
+		}
+		finally
+		{
+			activeAction = TimingAction.None;
 		}
 	}
 
@@ -149,6 +183,9 @@ else
 			return;
 		}
 
+		activeAction = TimingAction.Stop;
+		StateHasChanged();
+
 		try
 		{
 			var result = await ApiClient.StopTimingAsync(new TimingCommandRequest(currentEvent.EventCode, officialName, pin, selectedRiderId));
@@ -156,11 +193,15 @@ else
 			statusMessage = result?.Message ?? "Unable to reach the timing API.";
 			currentEvent = result?.Snapshot ?? currentEvent;
 		}
-		catch (Exception ex)
+		catch (Exception)
 		{
 			apiReachable = false;
 			ApplyLocalStop();
-			statusMessage = $"Timing API is unavailable, so this stop was recorded locally. {ex.Message}";
+			statusMessage = "Timing API is unavailable, so this stop was recorded locally.";
+		}
+		finally
+		{
+			activeAction = TimingAction.None;
 		}
 	}
 
@@ -170,6 +211,7 @@ else
 		{
 			currentEvent = await ApiClient.GetCurrentEventAsync();
 			apiReachable = true;
+			riderSearchText = string.Empty;
 			selectedRiderId = currentEvent?.Riders.FirstOrDefault()?.RiderId ?? string.Empty;
 			statusMessage = null;
 		}
@@ -177,9 +219,25 @@ else
 		{
 			apiReachable = false;
 			currentEvent = CreateOfflineFallbackEvent();
+			riderSearchText = string.Empty;
 			selectedRiderId = currentEvent.Riders.FirstOrDefault()?.RiderId ?? string.Empty;
 			statusMessage = "Timing API is not reachable yet. Showing an offline fallback event so the page can still load.";
 		}
+	}
+
+	private IEnumerable<RiderSummary> FilteredRiders =>
+		currentEvent?.Riders.Where(rider =>
+			string.IsNullOrWhiteSpace(riderSearchText) ||
+			rider.BibNumber.Contains(riderSearchText, StringComparison.OrdinalIgnoreCase) ||
+			rider.FullName.Contains(riderSearchText, StringComparison.OrdinalIgnoreCase) ||
+			rider.Category.Contains(riderSearchText, StringComparison.OrdinalIgnoreCase))
+		?? Array.Empty<RiderSummary>();
+
+	private enum TimingAction
+	{
+		None,
+		Start,
+		Stop
 	}
 
 	private void ApplyLocalStart()
