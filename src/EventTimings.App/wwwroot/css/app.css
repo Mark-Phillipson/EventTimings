@@ -49,6 +49,10 @@ a, .btn-link {
     border-color: rgba(255, 209, 102, 0.25);
 }
 
+.nav-scrollable .bi {
+    color: #d7d7d7;
+}
+
 .navbar-toggler:focus {
     box-shadow: 0 0 0 0.1rem rgba(255, 209, 102, 0.35);
 }
