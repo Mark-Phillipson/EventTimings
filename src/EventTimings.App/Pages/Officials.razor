@@ -1,0 +1,163 @@
+@page "/officials"
+@inject EventTimingApiClient ApiClient
+
+<PageTitle>Officials</PageTitle>
+
+<section class="panel">
+    <h1>Officials</h1>
+    <p class="muted">Manage official names and PIN credentials for timing operations.</p>
+
+    <div class="form-grid">
+        <label>
+            <span>Full name</span>
+            <input @bind="fullName" autocomplete="name" />
+        </label>
+
+        <label>
+            <span>PIN @(editingOfficialId is null ? "" : "(leave blank to keep current PIN)")</span>
+            <input @bind="pin" autocomplete="off" inputmode="numeric" type="password" />
+        </label>
+
+        <label>
+            <span>Active</span>
+            <select @bind="isActiveText">
+                <option value="true">Yes</option>
+                <option value="false">No</option>
+            </select>
+        </label>
+    </div>
+
+    <div class="action-row">
+        <button class="primary-action" type="button" @onclick="SaveAsync" disabled="@isBusy">@(editingOfficialId is null ? "Add Official" : "Update Official")</button>
+        <button class="secondary-action" type="button" @onclick="ResetForm">Clear</button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(statusMessage))
+    {
+        <p class="muted">@statusMessage</p>
+    }
+</section>
+
+<section class="panel">
+    <h2>Official list</h2>
+
+    @if (officials.Count == 0)
+    {
+        <p class="muted">No officials found.</p>
+    }
+    else
+    {
+        <div class="timing-list">
+            @foreach (var official in officials)
+            {
+                <article class="timing-row">
+                    <div>
+                        <strong>@official.FullName</strong>
+                        <div class="muted">@(official.IsActive ? "Active" : "Inactive") · Updated @official.UpdatedAt.LocalDateTime.ToShortTimeString()</div>
+                    </div>
+
+                    <div class="action-row" style="margin-top:0;">
+                        <button class="secondary-action" type="button" @onclick="() => Edit(official)">Edit</button>
+                        <button class="secondary-action" type="button" @onclick="() => DeleteAsync(official.OfficialId)">Delete</button>
+                    </div>
+                </article>
+            }
+        </div>
+    }
+</section>
+
+@code {
+    private List<OfficialDto> officials = [];
+    private string? editingOfficialId;
+    private string fullName = string.Empty;
+    private string pin = string.Empty;
+    private string isActiveText = "true";
+    private string? statusMessage;
+    private bool isBusy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        officials = (await ApiClient.GetOfficialsAsync())?.OrderBy(item => item.FullName).ToList() ?? [];
+    }
+
+    private async Task SaveAsync()
+    {
+        isBusy = true;
+        statusMessage = null;
+
+        try
+        {
+            if (editingOfficialId is null)
+            {
+                var created = await ApiClient.CreateOfficialAsync(new OfficialCreateRequest(fullName, pin));
+                statusMessage = created is null ? "Unable to create official." : "Official created.";
+            }
+            else
+            {
+                var updated = await ApiClient.UpdateOfficialAsync(editingOfficialId, new OfficialUpdateRequest(fullName, NormalizePin(pin), IsActive));
+                statusMessage = updated is null ? "Unable to update official." : "Official updated.";
+            }
+
+            await LoadAsync();
+            ResetForm();
+        }
+        catch
+        {
+            statusMessage = "Request failed. Check the API and try again.";
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private void Edit(OfficialDto official)
+    {
+        editingOfficialId = official.OfficialId;
+        fullName = official.FullName;
+        pin = string.Empty;
+        isActiveText = official.IsActive ? "true" : "false";
+        statusMessage = $"Editing {official.FullName}.";
+    }
+
+    private async Task DeleteAsync(string officialId)
+    {
+        try
+        {
+            var deleted = await ApiClient.DeleteOfficialAsync(officialId);
+            statusMessage = deleted ? "Official deleted." : "Unable to delete official.";
+            if (deleted)
+            {
+                await LoadAsync();
+                if (editingOfficialId == officialId)
+                {
+                    ResetForm();
+                }
+            }
+        }
+        catch
+        {
+            statusMessage = "Delete failed. Check the API and try again.";
+        }
+    }
+
+    private bool IsActive => string.Equals(isActiveText, "true", StringComparison.OrdinalIgnoreCase);
+
+    private static string? NormalizePin(string value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
+    private void ResetForm()
+    {
+        editingOfficialId = null;
+        fullName = string.Empty;
+        pin = string.Empty;
+        isActiveText = "true";
+    }
+}

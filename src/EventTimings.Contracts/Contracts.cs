@@ -66,3 +66,53 @@ public sealed record TimingCommandResult(
 	bool Success,
 	string Message,
 	EventSnapshot Snapshot);
+
+public sealed record RiderManagementDto(
+	string RiderId,
+	string BibNumber,
+	string FullName,
+	string Category,
+	string? RouteTypeId,
+	string? RouteTypeName);
+
+public sealed record RiderCreateRequest(
+	string BibNumber,
+	string FullName,
+	string Category,
+	string? RouteTypeId);
+
+public sealed record RiderUpdateRequest(
+	string BibNumber,
+	string FullName,
+	string Category,
+	string? RouteTypeId);
+
+public sealed record RouteTypeDto(
+	string RouteTypeId,
+	string Name,
+	int DistanceMiles,
+	bool IsActive);
+
+public sealed record RouteTypeCreateRequest(
+	string Name,
+	int DistanceMiles);
+
+public sealed record RouteTypeUpdateRequest(
+	string Name,
+	int DistanceMiles,
+	bool IsActive);
+
+public sealed record OfficialDto(
+	string OfficialId,
+	string FullName,
+	bool IsActive,
+	DateTimeOffset UpdatedAt);
+
+public sealed record OfficialCreateRequest(
+	string FullName,
+	string Pin);
+
+public sealed record OfficialUpdateRequest(
+	string FullName,
+	string? Pin,
+	bool IsActive);

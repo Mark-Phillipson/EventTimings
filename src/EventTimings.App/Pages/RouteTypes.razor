@@ -1,0 +1,158 @@
+@page "/route-types"
+@inject EventTimingApiClient ApiClient
+
+<PageTitle>Route Types</PageTitle>
+
+<section class="panel">
+    <h1>Route Types</h1>
+    <p class="muted">Manage route options such as 100 miles and 57 miles.</p>
+
+    <div class="form-grid">
+        <label>
+            <span>Name</span>
+            <input @bind="name" placeholder="e.g., Kent Tiger Ride" />
+        </label>
+
+        <label>
+            <span>Distance (miles)</span>
+            <input @bind="distanceMiles" inputmode="numeric" type="number" min="1" />
+        </label>
+
+        <label>
+            <span>Active</span>
+            <select @bind="isActiveText">
+                <option value="true">Yes</option>
+                <option value="false">No</option>
+            </select>
+        </label>
+    </div>
+
+    <div class="action-row">
+        <button class="primary-action" type="button" @onclick="SaveAsync" disabled="@isBusy">@(editingRouteTypeId is null ? "Add Route Type" : "Update Route Type")</button>
+        <button class="secondary-action" type="button" @onclick="ResetForm">Clear</button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(statusMessage))
+    {
+        <p class="muted">@statusMessage</p>
+    }
+</section>
+
+<section class="panel">
+    <h2>Configured route types</h2>
+
+    @if (routeTypes.Count == 0)
+    {
+        <p class="muted">No route types found.</p>
+    }
+    else
+    {
+        <div class="timing-list">
+            @foreach (var routeType in routeTypes)
+            {
+                <article class="timing-row">
+                    <div>
+                        <strong>@routeType.Name</strong>
+                        <div class="muted">@routeType.DistanceMiles miles · @(routeType.IsActive ? "Active" : "Inactive")</div>
+                    </div>
+
+                    <div class="action-row" style="margin-top:0;">
+                        <button class="secondary-action" type="button" @onclick="() => Edit(routeType)">Edit</button>
+                        <button class="secondary-action" type="button" @onclick="() => DeleteAsync(routeType.RouteTypeId)">Delete</button>
+                    </div>
+                </article>
+            }
+        </div>
+    }
+</section>
+
+@code {
+    private List<RouteTypeDto> routeTypes = [];
+    private string? editingRouteTypeId;
+    private string name = string.Empty;
+    private int distanceMiles = 57;
+    private string isActiveText = "true";
+    private string? statusMessage;
+    private bool isBusy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        routeTypes = (await ApiClient.GetRouteTypesAsync())?.OrderBy(item => item.DistanceMiles).ThenBy(item => item.Name).ToList() ?? [];
+    }
+
+    private async Task SaveAsync()
+    {
+        isBusy = true;
+        statusMessage = null;
+
+        try
+        {
+            if (editingRouteTypeId is null)
+            {
+                var created = await ApiClient.CreateRouteTypeAsync(new RouteTypeCreateRequest(name, distanceMiles));
+                statusMessage = created is null ? "Unable to create route type." : "Route type created.";
+            }
+            else
+            {
+                var updated = await ApiClient.UpdateRouteTypeAsync(editingRouteTypeId, new RouteTypeUpdateRequest(name, distanceMiles, IsActive));
+                statusMessage = updated is null ? "Unable to update route type." : "Route type updated.";
+            }
+
+            await LoadAsync();
+            ResetForm();
+        }
+        catch
+        {
+            statusMessage = "Request failed. Check the API and try again.";
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private void Edit(RouteTypeDto routeType)
+    {
+        editingRouteTypeId = routeType.RouteTypeId;
+        name = routeType.Name;
+        distanceMiles = routeType.DistanceMiles;
+        isActiveText = routeType.IsActive ? "true" : "false";
+        statusMessage = $"Editing {routeType.Name}.";
+    }
+
+    private async Task DeleteAsync(string routeTypeId)
+    {
+        try
+        {
+            var deleted = await ApiClient.DeleteRouteTypeAsync(routeTypeId);
+            statusMessage = deleted ? "Route type deleted." : "Unable to delete route type. Riders may still be assigned.";
+            if (deleted)
+            {
+                await LoadAsync();
+                if (editingRouteTypeId == routeTypeId)
+                {
+                    ResetForm();
+                }
+            }
+        }
+        catch
+        {
+            statusMessage = "Delete failed. Check the API and try again.";
+        }
+    }
+
+    private bool IsActive => string.Equals(isActiveText, "true", StringComparison.OrdinalIgnoreCase);
+
+    private void ResetForm()
+    {
+        editingRouteTypeId = null;
+        name = string.Empty;
+        distanceMiles = 57;
+        isActiveText = "true";
+    }
+}

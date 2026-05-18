@@ -41,10 +41,16 @@
 				<div>
 					<div class="form-grid">
 						<label>
+							<span>Filter riders</span>
+							<input value="@GetRiderFilter(wave.WaveId)"
+								   @oninput="e => riderFilterTexts[wave.WaveId] = e.Value?.ToString() ?? string.Empty"
+								   placeholder="Bib number or name" />
+						</label>
+						<label>
 							<span>Add rider to wave</span>
 							<select @bind="assignRiderId">
 								<option value="">-- select rider --</option>
-								@foreach (var rider in UnassignedRiders(wave))
+								@foreach (var rider in UnassignedRiders(wave, GetRiderFilter(wave.WaveId)))
 								{
 									<option value="@rider.RiderId">@rider.BibNumber · @rider.FullName</option>
 								}
@@ -79,6 +85,7 @@
 	[Parameter] public EventCallback<WaveStartResult> OnWaveStarted { get; set; }
 
 	private List<WaveDto> waves = [];
+	private Dictionary<string, string> riderFilterTexts = [];
 	private string newWaveName = string.Empty;
 	private string assignRiderId = string.Empty;
 	private string? waveMessage;
@@ -97,6 +104,16 @@
 
 	private IEnumerable<RiderSummary> UnassignedRiders(WaveDto wave) =>
 		AllRiders?.Where(r => !wave.RiderIds.Contains(r.RiderId)) ?? [];
+
+	private string GetRiderFilter(string waveId) =>
+		riderFilterTexts.TryGetValue(waveId, out var t) ? t : string.Empty;
+
+	private IEnumerable<RiderSummary> UnassignedRiders(WaveDto wave, string filter) =>
+		AllRiders?.Where(r =>
+			!wave.RiderIds.Contains(r.RiderId) &&
+			(string.IsNullOrWhiteSpace(filter) ||
+			 r.FullName.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+			 r.BibNumber.Contains(filter, StringComparison.OrdinalIgnoreCase))) ?? [];
 
 	private async Task CreateWaveAsync()
 	{

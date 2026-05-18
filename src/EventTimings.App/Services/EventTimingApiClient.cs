@@ -67,6 +67,84 @@ public sealed class EventTimingApiClient(IConfiguration configuration)
             return await response.Content.ReadFromJsonAsync<WaveStartResult>(cancellationToken);
         }, cancellationToken);
 
+    public Task<IReadOnlyList<RiderManagementDto>?> GetRidersAsync(CancellationToken cancellationToken = default) =>
+        SendWithFallbackAsync(client => client.GetFromJsonAsync<IReadOnlyList<RiderManagementDto>>("api/admin/riders", cancellationToken), cancellationToken);
+
+    public Task<RiderManagementDto?> CreateRiderAsync(RiderCreateRequest request, CancellationToken cancellationToken = default) =>
+        SendWithFallbackAsync(async client =>
+        {
+            using var response = await client.PostAsJsonAsync("api/admin/riders", request, cancellationToken);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<RiderManagementDto>(cancellationToken);
+        }, cancellationToken);
+
+    public Task<RiderManagementDto?> UpdateRiderAsync(string riderId, RiderUpdateRequest request, CancellationToken cancellationToken = default) =>
+        SendWithFallbackAsync(async client =>
+        {
+            using var response = await client.PutAsJsonAsync($"api/admin/riders/{riderId}", request, cancellationToken);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<RiderManagementDto>(cancellationToken);
+        }, cancellationToken);
+
+    public Task<bool> DeleteRiderAsync(string riderId, CancellationToken cancellationToken = default) =>
+        SendWithFallbackAsync(async client =>
+        {
+            using var response = await client.DeleteAsync($"api/admin/riders/{riderId}", cancellationToken);
+            return response.IsSuccessStatusCode;
+        }, cancellationToken);
+
+    public Task<IReadOnlyList<RouteTypeDto>?> GetRouteTypesAsync(CancellationToken cancellationToken = default) =>
+        SendWithFallbackAsync(client => client.GetFromJsonAsync<IReadOnlyList<RouteTypeDto>>("api/admin/route-types", cancellationToken), cancellationToken);
+
+    public Task<RouteTypeDto?> CreateRouteTypeAsync(RouteTypeCreateRequest request, CancellationToken cancellationToken = default) =>
+        SendWithFallbackAsync(async client =>
+        {
+            using var response = await client.PostAsJsonAsync("api/admin/route-types", request, cancellationToken);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<RouteTypeDto>(cancellationToken);
+        }, cancellationToken);
+
+    public Task<RouteTypeDto?> UpdateRouteTypeAsync(string routeTypeId, RouteTypeUpdateRequest request, CancellationToken cancellationToken = default) =>
+        SendWithFallbackAsync(async client =>
+        {
+            using var response = await client.PutAsJsonAsync($"api/admin/route-types/{routeTypeId}", request, cancellationToken);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<RouteTypeDto>(cancellationToken);
+        }, cancellationToken);
+
+    public Task<bool> DeleteRouteTypeAsync(string routeTypeId, CancellationToken cancellationToken = default) =>
+        SendWithFallbackAsync(async client =>
+        {
+            using var response = await client.DeleteAsync($"api/admin/route-types/{routeTypeId}", cancellationToken);
+            return response.IsSuccessStatusCode;
+        }, cancellationToken);
+
+    public Task<IReadOnlyList<OfficialDto>?> GetOfficialsAsync(CancellationToken cancellationToken = default) =>
+        SendWithFallbackAsync(client => client.GetFromJsonAsync<IReadOnlyList<OfficialDto>>("api/admin/officials", cancellationToken), cancellationToken);
+
+    public Task<OfficialDto?> CreateOfficialAsync(OfficialCreateRequest request, CancellationToken cancellationToken = default) =>
+        SendWithFallbackAsync(async client =>
+        {
+            using var response = await client.PostAsJsonAsync("api/admin/officials", request, cancellationToken);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<OfficialDto>(cancellationToken);
+        }, cancellationToken);
+
+    public Task<OfficialDto?> UpdateOfficialAsync(string officialId, OfficialUpdateRequest request, CancellationToken cancellationToken = default) =>
+        SendWithFallbackAsync(async client =>
+        {
+            using var response = await client.PutAsJsonAsync($"api/admin/officials/{officialId}", request, cancellationToken);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<OfficialDto>(cancellationToken);
+        }, cancellationToken);
+
+    public Task<bool> DeleteOfficialAsync(string officialId, CancellationToken cancellationToken = default) =>
+        SendWithFallbackAsync(async client =>
+        {
+            using var response = await client.DeleteAsync($"api/admin/officials/{officialId}", cancellationToken);
+            return response.IsSuccessStatusCode;
+        }, cancellationToken);
+
     private Task<TimingCommandResult?> PostTimingCommandAsync(string route, TimingCommandRequest request, CancellationToken cancellationToken) =>
         SendWithFallbackAsync(async client =>
         {

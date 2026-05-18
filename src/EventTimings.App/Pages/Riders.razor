@@ -1,0 +1,175 @@
+@page "/riders"
+@inject EventTimingApiClient ApiClient
+
+<PageTitle>Riders</PageTitle>
+
+<section class="panel">
+    <h1>Riders</h1>
+    <p class="muted">Create, edit, and remove riders. Each rider can be assigned to one route type.</p>
+
+    <div class="form-grid">
+        <label>
+            <span>Bib number</span>
+            <input @bind="bibNumber" />
+        </label>
+
+        <label>
+            <span>Full name</span>
+            <input @bind="fullName" />
+        </label>
+
+        <label>
+            <span>Category</span>
+            <input @bind="category" />
+        </label>
+
+        <label>
+            <span>Route type</span>
+            <select @bind="routeTypeId">
+                <option value="">No route type</option>
+                @foreach (var routeType in routeTypes)
+                {
+                    <option value="@routeType.RouteTypeId">@routeType.Name (@routeType.DistanceMiles miles)</option>
+                }
+            </select>
+        </label>
+    </div>
+
+    <div class="action-row">
+        <button class="primary-action" type="button" @onclick="SaveAsync" disabled="@isBusy">@(editingRiderId is null ? "Add Rider" : "Update Rider")</button>
+        <button class="secondary-action" type="button" @onclick="ResetForm">Clear</button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(statusMessage))
+    {
+        <p class="muted">@statusMessage</p>
+    }
+</section>
+
+<section class="panel">
+    <h2>Rider list</h2>
+
+    @if (riders.Count == 0)
+    {
+        <p class="muted">No riders found.</p>
+    }
+    else
+    {
+        <div class="timing-list">
+            @foreach (var rider in riders)
+            {
+                <article class="timing-row">
+                    <div>
+                        <strong>@rider.BibNumber · @rider.FullName</strong>
+                        <div class="muted">@rider.Category@(rider.RouteTypeName is not null ? $" · {rider.RouteTypeName}" : string.Empty)</div>
+                    </div>
+
+                    <div class="action-row" style="margin-top:0;">
+                        <button class="secondary-action" type="button" @onclick="() => Edit(rider)">Edit</button>
+                        <button class="secondary-action" type="button" @onclick="() => DeleteAsync(rider.RiderId)">Delete</button>
+                    </div>
+                </article>
+            }
+        </div>
+    }
+</section>
+
+@code {
+    private List<RiderManagementDto> riders = [];
+    private List<RouteTypeDto> routeTypes = [];
+
+    private string? editingRiderId;
+    private string bibNumber = string.Empty;
+    private string fullName = string.Empty;
+    private string category = string.Empty;
+    private string routeTypeId = string.Empty;
+    private string? statusMessage;
+    private bool isBusy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        riders = (await ApiClient.GetRidersAsync())?.OrderBy(item => item.BibNumber).ToList() ?? [];
+        routeTypes = (await ApiClient.GetRouteTypesAsync())?.Where(item => item.IsActive).OrderBy(item => item.DistanceMiles).ToList() ?? [];
+    }
+
+    private async Task SaveAsync()
+    {
+        isBusy = true;
+        statusMessage = null;
+
+        try
+        {
+            if (editingRiderId is null)
+            {
+                var created = await ApiClient.CreateRiderAsync(new RiderCreateRequest(bibNumber, fullName, category, NormalizeRouteTypeId(routeTypeId)));
+                statusMessage = created is null ? "Unable to create rider." : "Rider created.";
+            }
+            else
+            {
+                var updated = await ApiClient.UpdateRiderAsync(editingRiderId, new RiderUpdateRequest(bibNumber, fullName, category, NormalizeRouteTypeId(routeTypeId)));
+                statusMessage = updated is null ? "Unable to update rider." : "Rider updated.";
+            }
+
+            await LoadAsync();
+            ResetForm();
+        }
+        catch
+        {
+            statusMessage = "Request failed. Check the API and try again.";
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private void Edit(RiderManagementDto rider)
+    {
+        editingRiderId = rider.RiderId;
+        bibNumber = rider.BibNumber;
+        fullName = rider.FullName;
+        category = rider.Category;
+        routeTypeId = rider.RouteTypeId ?? string.Empty;
+        statusMessage = $"Editing {rider.FullName}.";
+    }
+
+    private async Task DeleteAsync(string riderId)
+    {
+        try
+        {
+            var deleted = await ApiClient.DeleteRiderAsync(riderId);
+            statusMessage = deleted ? "Rider deleted." : "Unable to delete rider.";
+            if (deleted)
+            {
+                await LoadAsync();
+                if (editingRiderId == riderId)
+                {
+                    ResetForm();
+                }
+            }
+        }
+        catch
+        {
+            statusMessage = "Delete failed. Check the API and try again.";
+        }
+    }
+
+    private void ResetForm()
+    {
+        editingRiderId = null;
+        bibNumber = string.Empty;
+        fullName = string.Empty;
+        category = string.Empty;
+        routeTypeId = string.Empty;
+    }
+
+    private static string? NormalizeRouteTypeId(string value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+}
