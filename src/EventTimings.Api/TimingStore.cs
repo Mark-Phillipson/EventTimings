@@ -22,6 +22,8 @@ internal sealed class TimingStore
     ];
 
     private readonly List<TimingSessionDto> timingSessions = [];
+    private readonly Dictionary<string, string> waveNames = [];
+    private readonly Dictionary<string, List<string>> waveRiders = [];
     private string lastUpdatedBy = "System";
     private DateTimeOffset lastUpdatedAt = DateTimeOffset.UtcNow;
 
@@ -87,6 +89,191 @@ internal sealed class TimingStore
             UpdateAuditTrail(request.OfficialName);
 
             return new TimingCommandResult(true, $"Stopped timing for {rider.FullName}.", CreateSnapshot());
+        }
+    }
+
+    public ImportResults ImportParticipants(IEnumerable<RiderImportDto> imports)
+    {
+        lock (syncRoot)
+        {
+            var errors = new List<string>();
+            var successCount = 0;
+            var skippedCount = 0;
+
+            foreach (var dto in imports)
+            {
+                if (string.IsNullOrWhiteSpace(dto.BibNumber) ||
+                    string.IsNullOrWhiteSpace(dto.FullName) ||
+                    string.IsNullOrWhiteSpace(dto.Category))
+                {
+                    errors.Add($"Skipped entry with bib '{dto.BibNumber}': missing required field(s).");
+                    skippedCount++;
+                    continue;
+                }
+
+                if (riders.Any(r => r.BibNumber == dto.BibNumber.Trim()))
+                {
+                    errors.Add($"Skipped bib #{dto.BibNumber} ({dto.FullName}): bib number already exists.");
+                    skippedCount++;
+                    continue;
+                }
+
+                var riderId = string.IsNullOrWhiteSpace(dto.Id)
+                    ? $"rider-{Guid.NewGuid():N}"
+                    : dto.Id;
+                riders.Add(new RiderSummary(riderId, dto.BibNumber.Trim(), dto.FullName.Trim(), dto.Category.Trim(), dto.AssignedRoute?.Trim()));
+                successCount++;
+            }
+
+            if (successCount > 0)
+            {
+                UpdateAuditTrail("Import");
+            }
+
+            return new ImportResults(successCount, skippedCount, errors);
+        }
+    }
+
+    public (EventSnapshot Snapshot, string? Error) AddParticipant(RiderImportDto dto)
+    {
+        lock (syncRoot)
+        {
+            if (string.IsNullOrWhiteSpace(dto.BibNumber) ||
+                string.IsNullOrWhiteSpace(dto.FullName) ||
+                string.IsNullOrWhiteSpace(dto.Category))
+            {
+                return (CreateSnapshot(), "BibNumber, FullName and Category are required.");
+            }
+
+            if (riders.Any(r => r.BibNumber == dto.BibNumber.Trim()))
+            {
+                return (CreateSnapshot(), $"Bib #{dto.BibNumber} is already registered.");
+            }
+
+            var riderId = string.IsNullOrWhiteSpace(dto.Id)
+                ? $"rider-{Guid.NewGuid():N}"
+                : dto.Id;
+            riders.Add(new RiderSummary(riderId, dto.BibNumber.Trim(), dto.FullName.Trim(), dto.Category.Trim(), dto.AssignedRoute?.Trim()));
+            UpdateAuditTrail("On-the-day add");
+            return (CreateSnapshot(), null);
+        }
+    }
+
+    public (EventSnapshot Snapshot, string? Error) UpdateRiderRoute(string riderId, string route)
+    {
+        lock (syncRoot)
+        {
+            var index = riders.FindIndex(r => r.RiderId == riderId);
+            if (index < 0)
+            {
+                return (CreateSnapshot(), "Rider not found.");
+            }
+
+            riders[index] = riders[index] with { AssignedRoute = route };
+            UpdateAuditTrail("Route update");
+            return (CreateSnapshot(), null);
+        }
+    }
+
+    public IReadOnlyList<WaveDto> GetWaves()
+    {
+        lock (syncRoot)
+        {
+            return waveNames
+                .Select(kv => new WaveDto(
+                    kv.Key,
+                    kv.Value,
+                    waveRiders.TryGetValue(kv.Key, out var ids) ? ids.AsReadOnly() : []))
+                .ToArray();
+        }
+    }
+
+    public WaveDto CreateWave(string waveName)
+    {
+        lock (syncRoot)
+        {
+            var waveId = $"wave-{Guid.NewGuid().ToString("N")[..8]}";
+            waveNames[waveId] = waveName;
+            waveRiders[waveId] = [];
+            return new WaveDto(waveId, waveName, []);
+        }
+    }
+
+    public (WaveDto? Wave, string? Error) AssignRiderToWave(string waveId, string riderId)
+    {
+        lock (syncRoot)
+        {
+            if (!waveNames.TryGetValue(waveId, out var waveName))
+            {
+                return (null, "Wave not found.");
+            }
+
+            if (!riders.Any(r => r.RiderId == riderId))
+            {
+                return (null, "Rider not found.");
+            }
+
+            var riderList = waveRiders[waveId];
+            if (!riderList.Contains(riderId))
+            {
+                riderList.Add(riderId);
+            }
+
+            var riderIndex = riders.FindIndex(r => r.RiderId == riderId);
+            if (riderIndex >= 0)
+            {
+                riders[riderIndex] = riders[riderIndex] with { WaveId = waveId, WaveName = waveName };
+            }
+
+            return (new WaveDto(waveId, waveName, riderList.AsReadOnly()), null);
+        }
+    }
+
+    public (WaveStartResult? Result, string? Error) StartWave(string waveId)
+    {
+        lock (syncRoot)
+        {
+            if (!waveRiders.TryGetValue(waveId, out var riderIds))
+            {
+                return (null, "Wave not found.");
+            }
+
+            var waveName = waveNames[waveId];
+            var startTime = DateTimeOffset.UtcNow;
+            var startedCount = 0;
+            var skipped = new List<string>();
+
+            foreach (var riderId in riderIds)
+            {
+                var rider = riders.FirstOrDefault(r => r.RiderId == riderId);
+                if (rider is null)
+                {
+                    continue;
+                }
+
+                var existingSession = timingSessions.LastOrDefault(s => s.RiderId == riderId && s.StoppedAt is null);
+                if (existingSession is not null)
+                {
+                    skipped.Add(rider.FullName);
+                    continue;
+                }
+
+                timingSessions.Add(new TimingSessionDto(
+                    Guid.NewGuid().ToString("N"),
+                    rider.RiderId,
+                    rider.FullName,
+                    $"Wave: {waveName}",
+                    startTime,
+                    null));
+                startedCount++;
+            }
+
+            if (startedCount > 0)
+            {
+                UpdateAuditTrail($"Wave: {waveName}");
+            }
+
+            return (new WaveStartResult(startTime, startedCount, skipped), null);
         }
     }
 

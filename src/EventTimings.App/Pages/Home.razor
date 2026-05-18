@@ -1,4 +1,4 @@
-﻿@page "/"
+@page "/"
 @inject EventTimingApiClient ApiClient
 
 <PageTitle>Event Timing Board</PageTitle>
@@ -58,7 +58,7 @@ else
 				<select @bind="selectedRiderId">
 					@foreach (var rider in FilteredRiders)
 					{
-						<option value="@rider.RiderId">@rider.BibNumber · @rider.FullName · @rider.Category</option>
+						<option value="@rider.RiderId">@rider.BibNumber · @rider.FullName · @rider.Category@(rider.AssignedRoute is not null ? $" [{rider.AssignedRoute}]" : string.Empty)</option>
 					}
 				</select>
 			</label>
@@ -89,6 +89,14 @@ else
 				</button>
 			</div>
 		</div>
+	</section>
+
+	<section class="panel">
+		<AddParticipantForm OnParticipantAdded="OnParticipantAdded" />
+	</section>
+
+	<section class="panel">
+		<WaveManagement AllRiders="currentEvent.Riders" OnWaveStarted="OnWaveStarted" />
 	</section>
 
 	<section class="panel">
@@ -232,6 +240,18 @@ else
 			rider.FullName.Contains(riderSearchText, StringComparison.OrdinalIgnoreCase) ||
 			rider.Category.Contains(riderSearchText, StringComparison.OrdinalIgnoreCase))
 		?? Array.Empty<RiderSummary>();
+
+	private void OnParticipantAdded(EventSnapshot snapshot)
+	{
+		currentEvent = snapshot;
+		statusMessage = "Participant added successfully.";
+	}
+
+	private async Task OnWaveStarted(WaveStartResult result)
+	{
+		currentEvent = await ApiClient.GetCurrentEventAsync() ?? currentEvent;
+		statusMessage = $"Wave started — {result.StartedCount} rider(s) timed from {result.StartedAt.LocalDateTime.ToShortTimeString()}.";
+	}
 
 	private enum TimingAction
 	{

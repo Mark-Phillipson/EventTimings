@@ -1,0 +1,188 @@
+@inject EventTimingApiClient ApiClient
+
+<div>
+	<h2>Wave management</h2>
+
+	<div class="form-grid">
+		<label>
+			<span>New wave name</span>
+			<input @bind="newWaveName" placeholder="e.g., Wave A" />
+		</label>
+		<div class="action-row">
+			<button class="secondary-action" type="button" disabled="@(isBusy || string.IsNullOrWhiteSpace(newWaveName))" @onclick="CreateWaveAsync">
+				Add Wave
+			</button>
+		</div>
+	</div>
+
+	@if (waves.Count == 0)
+	{
+		<p class="muted">No waves defined yet.</p>
+	}
+	else
+	{
+		@foreach (var wave in waves)
+		{
+			<article class="timing-row">
+				<div>
+					<strong>@wave.WaveName</strong>
+					<div class="muted">
+						@wave.RiderIds.Count rider(s)
+						@if (wave.RiderIds.Count > 0 && AllRiders is not null)
+						{
+							<span>
+								:
+								@string.Join(", ", wave.RiderIds
+									.Select(id => AllRiders.FirstOrDefault(r => r.RiderId == id)?.FullName ?? id))
+							</span>
+						}
+					</div>
+				</div>
+				<div>
+					<div class="form-grid">
+						<label>
+							<span>Add rider to wave</span>
+							<select @bind="assignRiderId">
+								<option value="">-- select rider --</option>
+								@foreach (var rider in UnassignedRiders(wave))
+								{
+									<option value="@rider.RiderId">@rider.BibNumber · @rider.FullName</option>
+								}
+							</select>
+						</label>
+					</div>
+					<div class="action-row">
+						<button class="secondary-action" type="button"
+								disabled="@(isBusy || string.IsNullOrWhiteSpace(assignRiderId))"
+								@onclick="() => AssignRiderAsync(wave.WaveId)">
+							Assign
+						</button>
+						<button class="primary-action" type="button"
+								disabled="@(isBusy || wave.RiderIds.Count == 0)"
+								@onclick="() => StartWaveAsync(wave.WaveId)">
+							Start Wave NOW
+						</button>
+					</div>
+				</div>
+			</article>
+		}
+	}
+
+	@if (!string.IsNullOrWhiteSpace(waveMessage))
+	{
+		<p class="muted">@waveMessage</p>
+	}
+</div>
+
+@code {
+	[Parameter] public IReadOnlyList<RiderSummary>? AllRiders { get; set; }
+	[Parameter] public EventCallback<WaveStartResult> OnWaveStarted { get; set; }
+
+	private List<WaveDto> waves = [];
+	private string newWaveName = string.Empty;
+	private string assignRiderId = string.Empty;
+	private string? waveMessage;
+	private bool isBusy;
+
+	protected override async Task OnInitializedAsync() => await LoadWavesAsync();
+
+	private async Task LoadWavesAsync()
+	{
+		var result = await ApiClient.GetWavesAsync();
+		if (result is not null)
+		{
+			waves = result.ToList();
+		}
+	}
+
+	private IEnumerable<RiderSummary> UnassignedRiders(WaveDto wave) =>
+		AllRiders?.Where(r => !wave.RiderIds.Contains(r.RiderId)) ?? [];
+
+	private async Task CreateWaveAsync()
+	{
+		if (string.IsNullOrWhiteSpace(newWaveName))
+		{
+			return;
+		}
+
+		isBusy = true;
+		waveMessage = null;
+		try
+		{
+			var wave = await ApiClient.CreateWaveAsync(new WaveCreateRequest(newWaveName.Trim()));
+			if (wave is not null)
+			{
+				waves.Add(wave);
+				newWaveName = string.Empty;
+			}
+		}
+		catch
+		{
+			waveMessage = "Failed to create wave. Please check the API is reachable.";
+		}
+		finally
+		{
+			isBusy = false;
+		}
+	}
+
+	private async Task AssignRiderAsync(string waveId)
+	{
+		if (string.IsNullOrWhiteSpace(assignRiderId))
+		{
+			return;
+		}
+
+		isBusy = true;
+		waveMessage = null;
+		try
+		{
+			var wave = await ApiClient.AssignRiderToWaveAsync(waveId, new WaveAssignRiderRequest(assignRiderId));
+			if (wave is not null)
+			{
+				var index = waves.FindIndex(w => w.WaveId == waveId);
+				if (index >= 0)
+				{
+					waves[index] = wave;
+				}
+
+				assignRiderId = string.Empty;
+			}
+		}
+		catch
+		{
+			waveMessage = "Failed to assign rider. Please check the API is reachable.";
+		}
+		finally
+		{
+			isBusy = false;
+		}
+	}
+
+	private async Task StartWaveAsync(string waveId)
+	{
+		isBusy = true;
+		waveMessage = null;
+		try
+		{
+			var result = await ApiClient.StartWaveAsync(waveId);
+			if (result is not null)
+			{
+				var skippedNote = result.SkippedRiderNames.Count > 0
+					? $", {result.SkippedRiderNames.Count} already running skipped ({string.Join(", ", result.SkippedRiderNames)})"
+					: string.Empty;
+
+				waveMessage = $"Wave started at {result.StartedAt.LocalDateTime.ToShortTimeString()} — {result.StartedCount} rider(s) started{skippedNote}.";
+				await OnWaveStarted.InvokeAsync(result);
+			}
+		}
+		catch
+		{
+			waveMessage = "Failed to start wave. Please check the API is reachable.";
+		}
+		finally
+		{
+			isBusy = false;
+		}
+	}
+}

@@ -1,0 +1,92 @@
+@inject EventTimingApiClient ApiClient
+
+<div>
+	<h2>Add participant on the day</h2>
+	<div class="form-grid">
+		<label>
+			<span>Bib number</span>
+			<input @bind="bibNumber" inputmode="numeric" placeholder="e.g., 501" />
+		</label>
+		<label>
+			<span>Full name</span>
+			<input @bind="fullName" autocomplete="name" />
+		</label>
+		<label>
+			<span>Category</span>
+			<input @bind="category" placeholder="e.g., Men Open, Women 40+" />
+		</label>
+		<label>
+			<span>Route (optional)</span>
+			<input @bind="assignedRoute" placeholder="e.g., Long, Short" />
+		</label>
+	</div>
+
+	@if (!string.IsNullOrWhiteSpace(formError))
+	{
+		<p class="muted">@formError</p>
+	}
+
+	<div class="action-row">
+		<button class="primary-action" type="button" disabled="@isBusy" @onclick="SubmitAsync">
+			@if (isBusy)
+			{
+				<span class="spinner-border spinner-border-sm button-spinner" role="status" aria-hidden="true"></span>
+			}
+			<span>Add Participant</span>
+		</button>
+	</div>
+</div>
+
+@code {
+	[Parameter] public EventCallback<EventSnapshot> OnParticipantAdded { get; set; }
+
+	private string bibNumber = string.Empty;
+	private string fullName = string.Empty;
+	private string category = string.Empty;
+	private string assignedRoute = string.Empty;
+	private string? formError;
+	private bool isBusy;
+
+	private async Task SubmitAsync()
+	{
+		formError = null;
+
+		if (string.IsNullOrWhiteSpace(bibNumber) ||
+			string.IsNullOrWhiteSpace(fullName) ||
+			string.IsNullOrWhiteSpace(category))
+		{
+			formError = "Bib number, full name, and category are required.";
+			return;
+		}
+
+		isBusy = true;
+		try
+		{
+			var dto = new RiderImportDto(
+				null,
+				bibNumber.Trim(),
+				fullName.Trim(),
+				category.Trim(),
+				string.IsNullOrWhiteSpace(assignedRoute) ? null : assignedRoute.Trim());
+
+			var snapshot = await ApiClient.AddParticipantAsync(dto);
+			if (snapshot is not null)
+			{
+				bibNumber = fullName = category = assignedRoute = string.Empty;
+				await OnParticipantAdded.InvokeAsync(snapshot);
+			}
+			else
+			{
+				formError = "Unable to reach the timing API.";
+			}
+		}
+		catch
+		{
+			formError = "Failed to add participant. Please check the API is reachable.";
+		}
+		finally
+		{
+			isBusy = false;
+		}
+	}
+}
