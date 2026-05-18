@@ -38,3 +38,5 @@ Desktop.ini
 
 # Logs
 *.log
+src/EventTimings.Api/eventtimings.db-shm
+src/EventTimings.Api/eventtimings.db-wal
