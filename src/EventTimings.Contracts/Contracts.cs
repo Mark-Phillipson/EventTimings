@@ -16,6 +16,11 @@ public sealed record RiderImportDto(
 	string Category,
 	string? AssignedRoute = null);
 
+public sealed record RiderContactImportDto(
+	string FullName,
+	string? Email = null,
+	string? Phone = null);
+
 public sealed record ImportResults(
 	int SuccessCount,
 	int SkippedCount,
@@ -45,6 +50,17 @@ public sealed record TimingSessionDto(
 	DateTimeOffset StartedAt,
 	DateTimeOffset? StoppedAt);
 
+public sealed record FinishedTimeReportRowDto(
+	string RiderId,
+	string BibNumber,
+	string FullName,
+	string Category,
+	string? RouteName,
+	DateTimeOffset? StartedAt,
+	DateTimeOffset? FinishedAt,
+	long? ElapsedSeconds,
+	string Status);
+
 public sealed record EventSnapshot(
 	string EventCode,
 	string EventName,
@@ -73,19 +89,25 @@ public sealed record RiderManagementDto(
 	string FullName,
 	string Category,
 	string? RouteTypeId,
-	string? RouteTypeName);
+	string? RouteTypeName,
+	string? Email = null,
+	string? Phone = null);
 
 public sealed record RiderCreateRequest(
 	string BibNumber,
 	string FullName,
 	string Category,
-	string? RouteTypeId);
+	string? RouteTypeId,
+	string? Email = null,
+	string? Phone = null);
 
 public sealed record RiderUpdateRequest(
 	string BibNumber,
 	string FullName,
 	string Category,
-	string? RouteTypeId);
+	string? RouteTypeId,
+	string? Email = null,
+	string? Phone = null);
 
 public sealed record RouteTypeDto(
 	string RouteTypeId,

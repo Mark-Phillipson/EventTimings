@@ -46,6 +46,16 @@
                 console.error('Service Worker registration failed:', error);
             });
         }
+
+        window.downloadFileFromText = (fileName, content) => {
+            const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+            const objectUrl = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = objectUrl;
+            link.download = fileName;
+            link.click();
+            URL.revokeObjectURL(objectUrl);
+        };
     </script>
 </body>
 

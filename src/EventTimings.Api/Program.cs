@@ -2,6 +2,8 @@ using EventTimings.Api;
 using EventTimings.Api.Data;
 using EventTimings.Contracts;
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -32,6 +34,17 @@ app.UseCors("client");
 
 app.MapGet("/api/event/current", (TimingStore store) => Results.Ok(store.GetSnapshot()))
     .WithName("GetCurrentEvent");
+
+app.MapGet("/api/reports/finished-times", (TimingStore store) =>
+    Results.Ok(store.GetFinishedTimeReport()))
+    .WithName("GetFinishedTimesReport");
+
+app.MapGet("/api/reports/finished-times.csv", (TimingStore store) =>
+{
+    var csv = BuildFinishedTimesCsv(store.GetFinishedTimeReport());
+    return Results.File(Encoding.UTF8.GetBytes(csv), "text/csv; charset=utf-8", "finished-times-report.csv");
+})
+    .WithName("ExportFinishedTimesCsv");
 
 app.MapPost("/api/event/timing/start", (TimingCommandRequest request, TimingStore store) =>
 {
@@ -131,6 +144,14 @@ app.MapDelete("/api/admin/riders/{riderId}", (string riderId, TimingStore store)
 })
     .WithName("DeleteRider");
 
+app.MapPost("/api/admin/riders/import-contacts", (IEnumerable<RiderContactImportDto> contacts, TimingStore store) =>
+    Results.Ok(store.ImportRiderContacts(contacts)))
+    .WithName("ImportRiderContacts");
+
+app.MapPost("/api/admin/riders/seed-contacts", (TimingStore store) =>
+    Results.Ok(store.ImportRiderContacts(RiderContactsData.Contacts)))
+    .WithName("SeedRiderContacts");
+
 app.MapGet("/api/admin/route-types", (TimingStore store) =>
     Results.Ok(store.GetRouteTypes()))
     .WithName("GetRouteTypes");
@@ -205,5 +226,46 @@ app.MapDelete("/api/admin/officials/{officialId}", (string officialId, TimingSto
     return error is null ? Results.NoContent() : Results.NotFound(new { error });
 })
     .WithName("DeleteOfficial");
+
+static string BuildFinishedTimesCsv(IReadOnlyList<FinishedTimeReportRowDto> rows)
+{
+    var builder = new StringBuilder();
+    builder.AppendLine("BibNumber,FullName,Category,Route,StartedAtUtc,FinishedAtUtc,Elapsed,Status");
+
+    foreach (var row in rows)
+    {
+        builder.AppendLine(string.Join(',',
+            EscapeCsv(row.BibNumber),
+            EscapeCsv(row.FullName),
+            EscapeCsv(row.Category),
+            EscapeCsv(row.RouteName ?? string.Empty),
+            EscapeCsv(row.StartedAt?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) ?? string.Empty),
+            EscapeCsv(row.FinishedAt?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) ?? string.Empty),
+            EscapeCsv(FormatElapsed(row.ElapsedSeconds)),
+            EscapeCsv(row.Status)));
+    }
+
+    return builder.ToString();
+}
+
+static string EscapeCsv(string value)
+{
+    if (value.Contains(',') || value.Contains('"') || value.Contains('\n') || value.Contains('\r'))
+    {
+        return $"\"{value.Replace("\"", "\"\"")}\"";
+    }
+
+    return value;
+}
+
+static string FormatElapsed(long? elapsedSeconds)
+{
+    if (elapsedSeconds is null)
+    {
+        return string.Empty;
+    }
+
+    return TimeSpan.FromSeconds(elapsedSeconds.Value).ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
+}
 
 app.Run();

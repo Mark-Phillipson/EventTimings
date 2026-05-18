@@ -242,6 +242,29 @@ select {
     color: #fde68a;
 }
 
+.results-table-wrapper {
+    overflow-x: auto;
+}
+
+.results-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.results-table th,
+.results-table td {
+    text-align: left;
+    padding: 0.7rem;
+    border-top: 1px solid rgba(148, 163, 184, 0.2);
+    white-space: nowrap;
+}
+
+.results-table th {
+    color: #cbd5e1;
+    font-size: 0.85rem;
+    letter-spacing: 0.02em;
+}
+
 .event-summary {
     margin-bottom: 0;
     color: #cbd5e1;

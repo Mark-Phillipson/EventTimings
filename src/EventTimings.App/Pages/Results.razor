@@ -1,0 +1,143 @@
+@page "/results"
+@inject EventTimingApiClient ApiClient
+@inject IJSRuntime JsRuntime
+
+<PageTitle>Results</PageTitle>
+
+<section class="panel">
+    <h1>Finished times report</h1>
+    <p class="muted">View current rider results and export the full report to CSV.</p>
+
+    <div class="action-row">
+        <button class="secondary-action" type="button" @onclick="LoadAsync" disabled="@isLoading">Refresh</button>
+        <button class="primary-action" type="button" @onclick="ExportCsvAsync" disabled="@isExporting">Export CSV</button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(statusMessage))
+    {
+        <p class="muted">@statusMessage</p>
+    }
+</section>
+
+<section class="panel">
+    <h2>Rider results</h2>
+    <p class="muted">@finishedCount of @rows.Count riders finished.</p>
+
+    @if (rows.Count == 0)
+    {
+        <p class="muted">No riders found.</p>
+    }
+    else
+    {
+        <div class="results-table-wrapper">
+            <table class="results-table">
+                <thead>
+                    <tr>
+                        <th>Bib</th>
+                        <th>Name</th>
+                        <th>Category</th>
+                        <th>Route</th>
+                        <th>Started</th>
+                        <th>Finished</th>
+                        <th>Elapsed</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in rows)
+                    {
+                        <tr>
+                            <td>@row.BibNumber</td>
+                            <td>@row.FullName</td>
+                            <td>@row.Category</td>
+                            <td>@(row.RouteName ?? "-")</td>
+                            <td>@FormatDateTime(row.StartedAt)</td>
+                            <td>@FormatDateTime(row.FinishedAt)</td>
+                            <td>@FormatElapsed(row.ElapsedSeconds)</td>
+                            <td>@row.Status</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+@code {
+    private List<FinishedTimeReportRowDto> rows = [];
+    private string? statusMessage;
+    private bool isLoading;
+    private bool isExporting;
+
+    private int finishedCount => rows.Count(row => row.Status == "Finished");
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        statusMessage = null;
+
+        try
+        {
+            rows = (await ApiClient.GetFinishedTimeReportAsync())?
+                .OrderBy(row => row.Status != "Finished")
+                .ThenBy(row => row.ElapsedSeconds ?? long.MaxValue)
+                .ThenBy(row => row.FullName)
+                .ToList()
+                ?? [];
+
+            statusMessage = $"Loaded {rows.Count} rider result(s).";
+        }
+        catch
+        {
+            statusMessage = "Unable to load results. Check the API and try again.";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task ExportCsvAsync()
+    {
+        isExporting = true;
+        statusMessage = null;
+
+        try
+        {
+            var csv = await ApiClient.GetFinishedTimesCsvAsync();
+            if (string.IsNullOrWhiteSpace(csv))
+            {
+                statusMessage = "No CSV data available yet.";
+                return;
+            }
+
+            await JsRuntime.InvokeVoidAsync("downloadFileFromText", "finished-times-report.csv", csv);
+            statusMessage = "CSV export downloaded.";
+        }
+        catch
+        {
+            statusMessage = "Unable to export CSV. Check the API and try again.";
+        }
+        finally
+        {
+            isExporting = false;
+        }
+    }
+
+    private static string FormatDateTime(DateTimeOffset? value)
+    {
+        return value?.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss") ?? "-";
+    }
+
+    private static string FormatElapsed(long? elapsedSeconds)
+    {
+        return elapsedSeconds is null
+            ? "-"
+            : TimeSpan.FromSeconds(elapsedSeconds.Value).ToString(@"hh\:mm\:ss");
+    }
+}

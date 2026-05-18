@@ -93,6 +93,14 @@ public sealed class EventTimingApiClient(IConfiguration configuration)
             return response.IsSuccessStatusCode;
         }, cancellationToken);
 
+    public Task<ImportResults?> SeedRiderContactsAsync(CancellationToken cancellationToken = default) =>
+        SendWithFallbackAsync(async client =>
+        {
+            using var response = await client.PostAsync("api/admin/riders/seed-contacts", null, cancellationToken);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<ImportResults>(cancellationToken);
+        }, cancellationToken);
+
     public Task<IReadOnlyList<RouteTypeDto>?> GetRouteTypesAsync(CancellationToken cancellationToken = default) =>
         SendWithFallbackAsync(client => client.GetFromJsonAsync<IReadOnlyList<RouteTypeDto>>("api/admin/route-types", cancellationToken), cancellationToken);
 
@@ -143,6 +151,17 @@ public sealed class EventTimingApiClient(IConfiguration configuration)
         {
             using var response = await client.DeleteAsync($"api/admin/officials/{officialId}", cancellationToken);
             return response.IsSuccessStatusCode;
+        }, cancellationToken);
+
+    public Task<IReadOnlyList<FinishedTimeReportRowDto>?> GetFinishedTimeReportAsync(CancellationToken cancellationToken = default) =>
+        SendWithFallbackAsync(client => client.GetFromJsonAsync<IReadOnlyList<FinishedTimeReportRowDto>>("api/reports/finished-times", cancellationToken), cancellationToken);
+
+    public Task<string?> GetFinishedTimesCsvAsync(CancellationToken cancellationToken = default) =>
+        SendWithFallbackAsync(async client =>
+        {
+            using var response = await client.GetAsync("api/reports/finished-times.csv", cancellationToken);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadAsStringAsync(cancellationToken);
         }, cancellationToken);
 
     private Task<TimingCommandResult?> PostTimingCommandAsync(string route, TimingCommandRequest request, CancellationToken cancellationToken) =>

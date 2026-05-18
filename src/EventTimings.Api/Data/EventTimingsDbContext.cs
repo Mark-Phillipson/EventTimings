@@ -20,6 +20,8 @@ public sealed class EventTimingsDbContext(DbContextOptions<EventTimingsDbContext
             entity.Property(item => item.FullName).HasMaxLength(256).IsRequired();
             entity.Property(item => item.Category).HasMaxLength(128).IsRequired();
             entity.Property(item => item.UpdatedAt).IsRequired();
+            entity.Property(item => item.Email).HasMaxLength(256);
+            entity.Property(item => item.Phone).HasMaxLength(32);
             entity.HasIndex(item => item.BibNumber).IsUnique();
 
             entity.HasOne(item => item.RouteType)
@@ -65,6 +67,10 @@ public sealed class RiderEntity
     public string? RouteTypeId { get; set; }
 
     public RouteTypeEntity? RouteType { get; set; }
+
+    public string? Email { get; set; }
+
+    public string? Phone { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

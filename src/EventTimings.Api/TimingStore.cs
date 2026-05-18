@@ -32,6 +32,58 @@ internal sealed class TimingStore
         }
     }
 
+    public IReadOnlyList<FinishedTimeReportRowDto> GetFinishedTimeReport()
+    {
+        lock (syncRoot)
+        {
+            using var dbContext = dbContextFactory.CreateDbContext();
+
+            var riders = dbContext.Riders
+                .AsNoTracking()
+                .Include(item => item.RouteType)
+                .OrderBy(item => item.BibNumber)
+                .ThenBy(item => item.FullName)
+                .ToArray();
+
+            var reportRows = riders
+                .Select(rider =>
+                {
+                    var riderSessions = timingSessions
+                        .Where(session => session.RiderId == rider.RiderId)
+                        .OrderByDescending(session => session.StartedAt)
+                        .ToArray();
+
+                    var completedSession = riderSessions.FirstOrDefault(session => session.StoppedAt is not null);
+                    var activeSession = riderSessions.FirstOrDefault(session => session.StoppedAt is null);
+
+                    var selectedSession = completedSession ?? activeSession;
+                    var elapsedSeconds = completedSession is null
+                        ? null
+                        : (long?)Math.Max(0, (completedSession.StoppedAt!.Value - completedSession.StartedAt).TotalSeconds);
+
+                    var status = completedSession is not null
+                        ? "Finished"
+                        : activeSession is not null
+                            ? "Running"
+                            : "Not started";
+
+                    return new FinishedTimeReportRowDto(
+                        rider.RiderId,
+                        rider.BibNumber,
+                        rider.FullName,
+                        rider.Category,
+                        rider.RouteType is null ? null : FormatRouteLabel(rider.RouteType),
+                        selectedSession?.StartedAt,
+                        completedSession?.StoppedAt,
+                        elapsedSeconds,
+                        status);
+                })
+                .ToArray();
+
+            return reportRows;
+        }
+    }
+
     public TimingCommandResult StartTiming(TimingCommandRequest request)
     {
         lock (syncRoot)
@@ -321,7 +373,9 @@ internal sealed class TimingStore
                     item.FullName,
                     item.Category,
                     item.RouteTypeId,
-                    item.RouteType != null ? FormatRouteLabel(item.RouteType) : null))
+                    item.RouteType != null ? FormatRouteLabel(item.RouteType) : null,
+                    item.Email,
+                    item.Phone))
                 .ToArray();
         }
     }
@@ -341,7 +395,9 @@ internal sealed class TimingStore
                     item.FullName,
                     item.Category,
                     item.RouteTypeId,
-                    item.RouteType != null ? FormatRouteLabel(item.RouteType) : null))
+                    item.RouteType != null ? FormatRouteLabel(item.RouteType) : null,
+                    item.Email,
+                    item.Phone))
                 .FirstOrDefault();
         }
     }
@@ -365,6 +421,8 @@ internal sealed class TimingStore
                 FullName = request.FullName.Trim(),
                 Category = request.Category.Trim(),
                 RouteTypeId = NormalizeRouteTypeId(request.RouteTypeId),
+                Email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim(),
+                Phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim(),
                 UpdatedAt = DateTimeOffset.UtcNow
             };
 
@@ -398,6 +456,8 @@ internal sealed class TimingStore
             rider.FullName = request.FullName.Trim();
             rider.Category = request.Category.Trim();
             rider.RouteTypeId = NormalizeRouteTypeId(request.RouteTypeId);
+            rider.Email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim();
+            rider.Phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim();
             rider.UpdatedAt = DateTimeOffset.UtcNow;
 
             dbContext.SaveChanges();
@@ -674,6 +734,7 @@ internal sealed class TimingStore
         {
             using var dbContext = dbContextFactory.CreateDbContext();
             dbContext.Database.EnsureCreated();
+            ApplySchemaUpdates(dbContext);
 
             if (!dbContext.RouteTypes.Any())
             {
@@ -818,6 +879,72 @@ internal sealed class TimingStore
         }
 
         return null;
+    }
+
+    private static void ApplySchemaUpdates(EventTimingsDbContext dbContext)
+    {
+        // Add new nullable columns to the Riders table; silently ignored if they already exist.
+        try { dbContext.Database.ExecuteSqlRaw("ALTER TABLE Riders ADD COLUMN Email TEXT"); } catch { }
+        try { dbContext.Database.ExecuteSqlRaw("ALTER TABLE Riders ADD COLUMN Phone TEXT"); } catch { }
+    }
+
+    public ImportResults ImportRiderContacts(IEnumerable<RiderContactImportDto> contacts)
+    {
+        lock (syncRoot)
+        {
+            using var dbContext = dbContextFactory.CreateDbContext();
+
+            var errors = new List<string>();
+            var successCount = 0;
+            var skippedCount = 0;
+            var nextBib = (dbContext.Riders.Any()
+                ? dbContext.Riders
+                    .AsEnumerable()
+                    .Select(r => int.TryParse(r.BibNumber, out var n) ? n : 0)
+                    .DefaultIfEmpty(0)
+                    .Max()
+                : 0) + 1;
+
+            foreach (var contact in contacts)
+            {
+                if (string.IsNullOrWhiteSpace(contact.FullName))
+                {
+                    errors.Add("Skipped entry with empty name.");
+                    skippedCount++;
+                    continue;
+                }
+
+                var normalizedName = contact.FullName.Trim();
+                if (dbContext.Riders.Any(r => r.FullName == normalizedName))
+                {
+                    errors.Add($"Skipped '{normalizedName}': rider with this name already exists.");
+                    skippedCount++;
+                    continue;
+                }
+
+                dbContext.Riders.Add(new RiderEntity
+                {
+                    RiderId = $"rider-{Guid.NewGuid():N}",
+                    BibNumber = nextBib.ToString("D3"),
+                    FullName = normalizedName,
+                    Category = "Open",
+                    Email = string.IsNullOrWhiteSpace(contact.Email) ? null : contact.Email.Trim(),
+                    Phone = string.IsNullOrWhiteSpace(contact.Phone) ? null : contact.Phone.Trim(),
+                    UpdatedAt = DateTimeOffset.UtcNow
+                });
+
+                nextBib++;
+                successCount++;
+            }
+
+            if (successCount > 0)
+            {
+                dbContext.SaveChanges();
+                UpdateAuditTrail("Contact import");
+            }
+
+            return new ImportResults(successCount, skippedCount, errors);
+        }
     }
 
     private static string? NormalizeRouteTypeId(string? routeTypeId)

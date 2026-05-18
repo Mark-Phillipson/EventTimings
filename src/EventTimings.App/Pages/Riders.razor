@@ -33,6 +33,16 @@
                 }
             </select>
         </label>
+
+        <label>
+            <span>Email address</span>
+            <input type="email" @bind="email" />
+        </label>
+
+        <label>
+            <span>Telephone number</span>
+            <input type="tel" @bind="phone" />
+        </label>
     </div>
 
     <div class="action-row">
@@ -47,21 +57,46 @@
 </section>
 
 <section class="panel">
+    <h2>One-time contact import</h2>
+    <p class="muted">Import the pre-loaded contact list. Riders already in the system (matched by name) are skipped. Bib numbers and categories should be updated after import.</p>
+    <div class="action-row">
+        <button class="secondary-action" type="button" @onclick="SeedContactsAsync" disabled="@isBusy">Import Contacts</button>
+    </div>
+    @if (!string.IsNullOrWhiteSpace(importMessage))
+    {
+        <p class="muted">@importMessage</p>
+    }
+</section>
+
+<section class="panel">
     <h2>Rider list</h2>
+
+    <label>
+        <span>Filter riders</span>
+        <input @bind="riderFilter" placeholder="Type name, bib, email, or phone" />
+    </label>
 
     @if (riders.Count == 0)
     {
         <p class="muted">No riders found.</p>
     }
+    else if (filteredRiders.Count == 0)
+    {
+        <p class="muted">No riders match the filter.</p>
+    }
     else
     {
         <div class="timing-list">
-            @foreach (var rider in riders)
+            @foreach (var rider in filteredRiders)
             {
                 <article class="timing-row">
                     <div>
                         <strong>@rider.BibNumber · @rider.FullName</strong>
                         <div class="muted">@rider.Category@(rider.RouteTypeName is not null ? $" · {rider.RouteTypeName}" : string.Empty)</div>
+                        @if (!string.IsNullOrWhiteSpace(rider.Email) || !string.IsNullOrWhiteSpace(rider.Phone))
+                        {
+                            <div class="muted">@rider.Email@(!string.IsNullOrWhiteSpace(rider.Email) && !string.IsNullOrWhiteSpace(rider.Phone) ? " · " : string.Empty)@rider.Phone</div>
+                        }
                     </div>
 
                     <div class="action-row" style="margin-top:0;">
@@ -83,8 +118,18 @@
     private string fullName = string.Empty;
     private string category = string.Empty;
     private string routeTypeId = string.Empty;
+    private string email = string.Empty;
+    private string phone = string.Empty;
+    private string riderFilter = string.Empty;
     private string? statusMessage;
+    private string? importMessage;
     private bool isBusy;
+
+    private List<RiderManagementDto> filteredRiders => riders
+        .Where(MatchesFilter)
+        .OrderBy(item => item.FullName)
+        .ThenBy(item => item.BibNumber)
+        .ToList();
 
     protected override async Task OnInitializedAsync()
     {
@@ -93,7 +138,7 @@
 
     private async Task LoadAsync()
     {
-        riders = (await ApiClient.GetRidersAsync())?.OrderBy(item => item.BibNumber).ToList() ?? [];
+        riders = (await ApiClient.GetRidersAsync())?.OrderBy(item => item.FullName).ThenBy(item => item.BibNumber).ToList() ?? [];
         routeTypes = (await ApiClient.GetRouteTypesAsync())?.Where(item => item.IsActive).OrderBy(item => item.DistanceMiles).ToList() ?? [];
     }
 
@@ -106,12 +151,12 @@
         {
             if (editingRiderId is null)
             {
-                var created = await ApiClient.CreateRiderAsync(new RiderCreateRequest(bibNumber, fullName, category, NormalizeRouteTypeId(routeTypeId)));
+                var created = await ApiClient.CreateRiderAsync(new RiderCreateRequest(bibNumber, fullName, category, NormalizeRouteTypeId(routeTypeId), NormalizeContact(email), NormalizeContact(phone)));
                 statusMessage = created is null ? "Unable to create rider." : "Rider created.";
             }
             else
             {
-                var updated = await ApiClient.UpdateRiderAsync(editingRiderId, new RiderUpdateRequest(bibNumber, fullName, category, NormalizeRouteTypeId(routeTypeId)));
+                var updated = await ApiClient.UpdateRiderAsync(editingRiderId, new RiderUpdateRequest(bibNumber, fullName, category, NormalizeRouteTypeId(routeTypeId), NormalizeContact(email), NormalizeContact(phone)));
                 statusMessage = updated is null ? "Unable to update rider." : "Rider updated.";
             }
 
@@ -135,6 +180,8 @@
         fullName = rider.FullName;
         category = rider.Category;
         routeTypeId = rider.RouteTypeId ?? string.Empty;
+        email = rider.Email ?? string.Empty;
+        phone = rider.Phone ?? string.Empty;
         statusMessage = $"Editing {rider.FullName}.";
     }
 
@@ -166,10 +213,58 @@
         fullName = string.Empty;
         category = string.Empty;
         routeTypeId = string.Empty;
+        email = string.Empty;
+        phone = string.Empty;
+    }
+
+    private async Task SeedContactsAsync()
+    {
+        isBusy = true;
+        importMessage = null;
+        try
+        {
+            var result = await ApiClient.SeedRiderContactsAsync();
+            if (result is null)
+            {
+                importMessage = "Import failed. Check the API and try again.";
+            }
+            else
+            {
+                importMessage = $"Import complete: {result.SuccessCount} added, {result.SkippedCount} skipped.";
+                await LoadAsync();
+            }
+        }
+        catch
+        {
+            importMessage = "Import failed. Check the API and try again.";
+        }
+        finally
+        {
+            isBusy = false;
+        }
     }
 
     private static string? NormalizeRouteTypeId(string value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
+    private static string? NormalizeContact(string value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private bool MatchesFilter(RiderManagementDto rider)
+    {
+        if (string.IsNullOrWhiteSpace(riderFilter))
+        {
+            return true;
+        }
+
+        var filter = riderFilter.Trim();
+        return rider.FullName.Contains(filter, StringComparison.OrdinalIgnoreCase)
+            || rider.BibNumber.Contains(filter, StringComparison.OrdinalIgnoreCase)
+            || (!string.IsNullOrWhiteSpace(rider.Email) && rider.Email.Contains(filter, StringComparison.OrdinalIgnoreCase))
+            || (!string.IsNullOrWhiteSpace(rider.Phone) && rider.Phone.Contains(filter, StringComparison.OrdinalIgnoreCase));
     }
 }
