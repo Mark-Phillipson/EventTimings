@@ -1,0 +1,40 @@
+# Build output
+bin/
+obj/
+
+# Visual Studio / Rider / VS Code state
+.vs/
+.idea/
+*.user
+*.userosscache
+*.suo
+*.cache
+*.VC.db
+*.VC.VC.opendb
+
+# .NET artifacts
+TestResults/
+CoverageReports/
+*.nupkg
+*.snupkg
+
+# Blazor / web build output
+wwwroot/service-worker-assets.js
+wwwroot/manifest.webmanifest
+wwwroot/**/*.gz
+wwwroot/**/*.br
+
+# Local configuration and secrets
+appsettings.Development.json
+appsettings.Local.json
+*.pfx
+*.key
+*.pem
+
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Logs
+*.log

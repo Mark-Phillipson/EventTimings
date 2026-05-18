@@ -1,0 +1,272 @@
+﻿@page "/"
+@inject EventTimingApiClient ApiClient
+
+<PageTitle>Event Timing Board</PageTitle>
+
+@if (currentEvent is null)
+{
+	<p>Loading SFA Sportive 2025 timing board...</p>
+}
+else
+{
+	<div class="timing-header">
+		<div>
+			<p class="eyebrow">San Fairy Ann CC sportive timing</p>
+			<h1>@currentEvent.EventName</h1>
+			<p class="muted">@currentEvent.Venue · @currentEvent.EventDate.ToLongDateString()</p>
+		</div>
+
+		<div class="status-card">
+			<span class="status-label">Status</span>
+			<strong>@currentEvent.Status</strong>
+			<small>Updated by @currentEvent.LastUpdatedBy at @currentEvent.LastUpdatedAt.LocalDateTime.ToShortTimeString()</small>
+		</div>
+	</div>
+
+	<section class="panel">
+		<p class="event-summary">
+			San Fairy Ann CC's annual sportive supports Air Ambulance Kent Surrey Sussex. The event features the
+			100-mile Kent Tiger Ride and the 57-mile Cruiser Classic, starting from Marden Railway Station with a
+			complimentary breakfast muffin and hot drink before riders head out on unsigned routes.
+		</p>
+	</section>
+
+	<section class="panel grid-two">
+		<div>
+			<h2>Official timing sign-in</h2>
+			<div class="form-grid">
+				<label>
+					<span>Name</span>
+					<input @bind="officialName" autocomplete="name" />
+				</label>
+
+				<label>
+					<span>PIN</span>
+					<input @bind="pin" autocomplete="off" inputmode="numeric" type="password" />
+				</label>
+			</div>
+		</div>
+
+		<div>
+			<h2>Rider timing</h2>
+			<label>
+				<span>Select rider to time</span>
+				<select @bind="selectedRiderId">
+					@foreach (var rider in currentEvent.Riders)
+					{
+						<option value="@rider.RiderId">@rider.BibNumber · @rider.FullName · @rider.Category</option>
+					}
+				</select>
+			</label>
+
+			<div class="action-row">
+				<button class="primary-action" @onclick="StartTiming">Start</button>
+				<button class="secondary-action" @onclick="StopTiming">Stop</button>
+			</div>
+		</div>
+	</section>
+
+	<section class="panel">
+		<h2>Live timings</h2>
+		@if (currentEvent.TimingSessions.Count == 0)
+		{
+			<p class="muted">No timing sessions recorded yet.</p>
+		}
+		else
+		{
+			<div class="timing-list">
+				@foreach (var timingSession in currentEvent.TimingSessions)
+				{
+					<article class="timing-row">
+						<div>
+							<strong>@timingSession.RiderName</strong>
+							<div class="muted">Started by @timingSession.OfficialName at @timingSession.StartedAt.LocalDateTime.ToShortTimeString()</div>
+						</div>
+
+						<div>
+							@if (timingSession.StoppedAt is null)
+							{
+								<span class="badge running">Running</span>
+							}
+							else
+							{
+								<span class="badge stopped">Stopped at @timingSession.StoppedAt.Value.LocalDateTime.ToShortTimeString()</span>
+							}
+						</div>
+					</article>
+				}
+			</div>
+		}
+	</section>
+
+	@if (!string.IsNullOrWhiteSpace(statusMessage))
+	{
+		<section class="panel message-panel">
+			@statusMessage
+		</section>
+	}
+}
+
+@code {
+	private EventSnapshot? currentEvent;
+	private string officialName = "Mark Phillipson";
+	private string pin = "2468";
+	private string selectedRiderId = string.Empty;
+	private string? statusMessage;
+	private bool apiReachable = true;
+
+	protected override async Task OnInitializedAsync()
+	{
+		await RefreshAsync();
+	}
+
+	private async Task StartTiming()
+	{
+		if (currentEvent is null)
+		{
+			return;
+		}
+
+		try
+		{
+			var result = await ApiClient.StartTimingAsync(new TimingCommandRequest(currentEvent.EventCode, officialName, pin, selectedRiderId));
+			apiReachable = true;
+			statusMessage = result?.Message ?? "Unable to reach the timing API.";
+			currentEvent = result?.Snapshot ?? currentEvent;
+		}
+		catch (Exception ex)
+		{
+			apiReachable = false;
+			ApplyLocalStart();
+			statusMessage = $"Timing API is unavailable, so this start was recorded locally. {ex.Message}";
+		}
+	}
+
+	private async Task StopTiming()
+	{
+		if (currentEvent is null)
+		{
+			return;
+		}
+
+		try
+		{
+			var result = await ApiClient.StopTimingAsync(new TimingCommandRequest(currentEvent.EventCode, officialName, pin, selectedRiderId));
+			apiReachable = true;
+			statusMessage = result?.Message ?? "Unable to reach the timing API.";
+			currentEvent = result?.Snapshot ?? currentEvent;
+		}
+		catch (Exception ex)
+		{
+			apiReachable = false;
+			ApplyLocalStop();
+			statusMessage = $"Timing API is unavailable, so this stop was recorded locally. {ex.Message}";
+		}
+	}
+
+	private async Task RefreshAsync()
+	{
+		try
+		{
+			currentEvent = await ApiClient.GetCurrentEventAsync();
+			apiReachable = true;
+			selectedRiderId = currentEvent?.Riders.FirstOrDefault()?.RiderId ?? string.Empty;
+			statusMessage = null;
+		}
+		catch
+		{
+			apiReachable = false;
+			currentEvent = CreateOfflineFallbackEvent();
+			selectedRiderId = currentEvent.Riders.FirstOrDefault()?.RiderId ?? string.Empty;
+			statusMessage = "Timing API is not reachable yet. Showing an offline fallback event so the page can still load.";
+		}
+	}
+
+	private void ApplyLocalStart()
+	{
+		if (currentEvent is null || string.IsNullOrWhiteSpace(selectedRiderId))
+		{
+			return;
+		}
+
+		var rider = currentEvent.Riders.FirstOrDefault(item => item.RiderId == selectedRiderId);
+		if (rider is null)
+		{
+			return;
+		}
+
+		var activeSession = currentEvent.TimingSessions.FirstOrDefault(session => session.RiderId == rider.RiderId && session.StoppedAt is null);
+		if (activeSession is not null)
+		{
+			return;
+		}
+
+		var sessions = currentEvent.TimingSessions.ToList();
+		sessions.Insert(0, new TimingSessionDto(
+			Guid.NewGuid().ToString("N"),
+			rider.RiderId,
+			rider.FullName,
+			officialName,
+			DateTimeOffset.UtcNow,
+			null));
+
+		currentEvent = currentEvent with
+		{
+			TimingSessions = sessions,
+			LastUpdatedBy = officialName,
+			LastUpdatedAt = DateTimeOffset.UtcNow,
+			Status = apiReachable ? currentEvent.Status : "Live (local)"
+		};
+	}
+
+	private void ApplyLocalStop()
+	{
+		if (currentEvent is null || string.IsNullOrWhiteSpace(selectedRiderId))
+		{
+			return;
+		}
+
+		var rider = currentEvent.Riders.FirstOrDefault(item => item.RiderId == selectedRiderId);
+		if (rider is null)
+		{
+			return;
+		}
+
+		var sessions = currentEvent.TimingSessions.ToList();
+		var sessionIndex = sessions.FindIndex(session => session.RiderId == rider.RiderId && session.StoppedAt is null);
+		if (sessionIndex < 0)
+		{
+			return;
+		}
+
+		sessions[sessionIndex] = sessions[sessionIndex] with { StoppedAt = DateTimeOffset.UtcNow };
+		currentEvent = currentEvent with
+		{
+			TimingSessions = sessions,
+			LastUpdatedBy = officialName,
+			LastUpdatedAt = DateTimeOffset.UtcNow,
+			Status = apiReachable ? currentEvent.Status : "Ready (local)"
+		};
+	}
+
+	private static EventSnapshot CreateOfflineFallbackEvent()
+	{
+		var riders = new[]
+		{
+			new RiderSummary("offline-rider-001", "101", "Ava Mitchell", "Women Open"),
+			new RiderSummary("offline-rider-002", "204", "Ben Carter", "Men 40+"),
+			new RiderSummary("offline-rider-003", "317", "Chloe King", "Junior")
+		};
+
+		return new EventSnapshot(
+			"marden-2026",
+			"SFA Sportive 2025",
+			"Marden Railway Station, TN12 9DR",
+			new DateOnly(2025, 5, 11),
+			"Offline preview",
+			riders,
+			Array.Empty<TimingSessionDto>(),
+			"System",
+			DateTimeOffset.UtcNow);
+	}
+}

@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/EventTimings.Api/EventTimings.Api.csproj" />
+    <Project Path="src/EventTimings.App/EventTimings.App.csproj" />
+    <Project Path="src/EventTimings.Contracts/EventTimings.Contracts.csproj" />
+  </Folder>
+</Solution>
