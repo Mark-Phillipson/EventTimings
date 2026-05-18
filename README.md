@@ -41,7 +41,7 @@ dotnet run --project src/EventTimings.App/EventTimings.App.csproj
 ## Default development values
 
 - Official name: `Mark Phillipson`
-- PIN: `2468`
+- PIN: `****`
 - Event code: `marden-2026`
 
 ## Next steps
@@ -50,3 +50,9 @@ dotnet run --project src/EventTimings.App/EventTimings.App.csproj
 - Add persistent synchronization for offline timing actions
 - Add an admin screen for event and rider setup
 - Add deployment configuration for Azure hosting
+
+```powershell
+ azd auth logout
+ azd auth login --tenant-id 8cdf6afa-0a88-41ae-bf36-b23e42f1f035
+ azd deploy --all
+```

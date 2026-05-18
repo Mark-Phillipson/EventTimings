@@ -7,6 +7,5 @@ services:
     project: ./src/EventTimings.Api
     host: appservice
     language: dotnet
-    dist: .
 pipeline:
   provider: github

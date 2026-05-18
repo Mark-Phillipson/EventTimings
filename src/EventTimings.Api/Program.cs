@@ -1,6 +1,7 @@
 using EventTimings.Api;
 using EventTimings.Api.Data;
 using EventTimings.Contracts;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
 using System.Text;
@@ -8,6 +9,12 @@ using System.Text;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("client", policy => policy
@@ -54,11 +61,14 @@ if (app.Environment.IsDevelopment())
 
 if (!app.Environment.IsDevelopment())
 {
+    app.UseForwardedHeaders();
     app.UseHttpsRedirection();
 }
 app.UseCors("client");
 app.UseBlazorFrameworkFiles();
 app.UseStaticFiles();
+
+app.MapGet("/health", () => Results.Ok("healthy"));
 
 app.MapGet("/api/event/current", (TimingStore store) => Results.Ok(store.GetSnapshot()))
     .WithName("GetCurrentEvent");
