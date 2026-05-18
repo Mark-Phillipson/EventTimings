@@ -138,3 +138,9 @@ public sealed record OfficialUpdateRequest(
 	string FullName,
 	string? Pin,
 	bool IsActive);
+
+public sealed record PagedTimingSessionsDto(
+	IReadOnlyList<TimingSessionDto> Items,
+	int TotalCount,
+	int Page,
+	int PageSize);

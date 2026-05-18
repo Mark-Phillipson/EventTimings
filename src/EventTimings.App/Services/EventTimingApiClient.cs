@@ -10,6 +10,9 @@ public sealed class EventTimingApiClient(IConfiguration configuration)
     public Task<EventSnapshot?> GetCurrentEventAsync(CancellationToken cancellationToken = default) =>
         SendWithFallbackAsync(client => client.GetFromJsonAsync<EventSnapshot>("api/event/current", cancellationToken), cancellationToken);
 
+    public Task<PagedTimingSessionsDto?> GetTimingSessionsPagedAsync(int page = 0, int pageSize = 20, CancellationToken cancellationToken = default) =>
+        SendWithFallbackAsync(client => client.GetFromJsonAsync<PagedTimingSessionsDto>($"api/event/timings?page={page}&pageSize={pageSize}", cancellationToken), cancellationToken);
+
     public Task<TimingCommandResult?> StartTimingAsync(TimingCommandRequest request, CancellationToken cancellationToken = default) =>
         PostTimingCommandAsync("api/event/timing/start", request, cancellationToken);
 

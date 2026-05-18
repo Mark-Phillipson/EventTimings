@@ -958,6 +958,24 @@ internal sealed class TimingStore
         lastUpdatedAt = DateTimeOffset.UtcNow;
     }
 
+    public PagedTimingSessionsDto GetTimingSessionsPaged(int page = 0, int pageSize = 20)
+    {
+        lock (syncRoot)
+        {
+            var orderedSessions = timingSessions
+                .OrderByDescending(session => session.StartedAt)
+                .ToArray();
+
+            var totalCount = orderedSessions.Length;
+            var items = orderedSessions
+                .Skip(page * pageSize)
+                .Take(pageSize)
+                .ToArray();
+
+            return new PagedTimingSessionsDto(items, totalCount, page, pageSize);
+        }
+    }
+
     private EventSnapshot CreateSnapshot(EventTimingsDbContext dbContext)
     {
         var status = timingSessions.Any(session => session.StoppedAt is null) ? "Live" : "Ready";

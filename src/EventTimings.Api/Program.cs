@@ -35,6 +35,14 @@ app.UseCors("client");
 app.MapGet("/api/event/current", (TimingStore store) => Results.Ok(store.GetSnapshot()))
     .WithName("GetCurrentEvent");
 
+app.MapGet("/api/event/timings", (int page, int pageSize, TimingStore store) =>
+{
+    var validatedPage = Math.Max(0, page);
+    var validatedPageSize = Math.Max(1, Math.Min(pageSize, 100)); // Cap at 100 for safety
+    return Results.Ok(store.GetTimingSessionsPaged(validatedPage, validatedPageSize));
+})
+    .WithName("GetTimingSessionsPaged");
+
 app.MapGet("/api/reports/finished-times", (TimingStore store) =>
     Results.Ok(store.GetFinishedTimeReport()))
     .WithName("GetFinishedTimesReport");

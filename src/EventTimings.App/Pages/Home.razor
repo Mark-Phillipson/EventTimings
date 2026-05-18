@@ -101,14 +101,14 @@ else
 
 	<section class="panel">
 		<h2>Live timings</h2>
-		@if (currentEvent.TimingSessions.Count == 0)
+		@if (displayedTimingSessions.Count == 0)
 		{
 			<p class="muted">No timing sessions recorded yet.</p>
 		}
 		else
 		{
 			<div class="timing-list">
-				@foreach (var timingSession in currentEvent.TimingSessions)
+				@foreach (var timingSession in displayedTimingSessions)
 				{
 					<article class="timing-row">
 						<div>
@@ -129,6 +129,19 @@ else
 					</article>
 				}
 			</div>
+
+			<div style="margin-top: 1rem; text-align: center; font-size: 0.9rem; color: #666;">
+				<span>Page @(currentPage + 1) of @totalPages (@displayedTimingSessions.Count of @totalTimingSessions rows)</span>
+			</div>
+
+			<div style="margin-top: 0.5rem; display: flex; gap: 0.5rem; justify-content: center;">
+				<button type="button" @onclick="GoToPreviousPage" disabled="@(currentPage == 0)" class="pagination-btn">
+					Prev
+				</button>
+				<button type="button" @onclick="GoToNextPage" disabled="@((currentPage + 1) >= totalPages)" class="pagination-btn">
+					Next
+				</button>
+			</div>
 		}
 	</section>
 
@@ -141,7 +154,12 @@ else
 }
 
 @code {
+	private const int PageSize = 20;
 	private EventSnapshot? currentEvent;
+	private List<TimingSessionDto> displayedTimingSessions = [];
+	private int currentPage = 0;
+	private int totalTimingSessions = 0;
+	private int totalPages = 0;
 	private string officialName = "Mark Phillipson";
 	private string pin = "2468";
 	private string riderSearchText = string.Empty;
@@ -153,6 +171,42 @@ else
 	protected override async Task OnInitializedAsync()
 	{
 		await RefreshAsync();
+	}
+
+	private async Task LoadTimingsPage(int page)
+	{
+		try
+		{
+			var paged = await ApiClient.GetTimingSessionsPagedAsync(page, PageSize);
+			if (paged is not null)
+			{
+				displayedTimingSessions = paged.Items.ToList();
+				currentPage = paged.Page;
+				totalTimingSessions = paged.TotalCount;
+				totalPages = (paged.TotalCount + PageSize - 1) / PageSize;
+				if (totalPages == 0) totalPages = 1;
+			}
+		}
+		catch
+		{
+			// Fall back gracefully if paging API fails
+		}
+	}
+
+	private async Task GoToNextPage()
+	{
+		if ((currentPage + 1) < totalPages)
+		{
+			await LoadTimingsPage(currentPage + 1);
+		}
+	}
+
+	private async Task GoToPreviousPage()
+	{
+		if (currentPage > 0)
+		{
+			await LoadTimingsPage(currentPage - 1);
+		}
 	}
 
 	private async Task StartTiming()
@@ -171,6 +225,7 @@ else
 			apiReachable = true;
 			statusMessage = result?.Message ?? "Unable to reach the timing API.";
 			currentEvent = result?.Snapshot ?? currentEvent;
+			await LoadTimingsPage(0); // Reload first page to show newest timing
 		}
 		catch (Exception)
 		{
@@ -200,6 +255,7 @@ else
 			apiReachable = true;
 			statusMessage = result?.Message ?? "Unable to reach the timing API.";
 			currentEvent = result?.Snapshot ?? currentEvent;
+			await LoadTimingsPage(0); // Reload first page to ensure consistency
 		}
 		catch (Exception)
 		{
@@ -222,6 +278,7 @@ else
 			riderSearchText = string.Empty;
 			selectedRiderId = currentEvent?.Riders.FirstOrDefault()?.RiderId ?? string.Empty;
 			statusMessage = null;
+			await LoadTimingsPage(0);
 		}
 		catch
 		{
@@ -245,12 +302,14 @@ else
 	{
 		currentEvent = snapshot;
 		statusMessage = "Participant added successfully.";
+		currentPage = 0; // Reset to first page
 	}
 
 	private async Task OnWaveStarted(WaveStartResult result)
 	{
 		currentEvent = await ApiClient.GetCurrentEventAsync() ?? currentEvent;
 		statusMessage = $"Wave started — {result.StartedCount} rider(s) timed from {result.StartedAt.LocalDateTime.ToShortTimeString()}.";
+		await LoadTimingsPage(0); // Reset to first page to show new timings
 	}
 
 	private enum TimingAction
@@ -348,3 +407,27 @@ else
 			DateTimeOffset.UtcNow);
 	}
 }
+
+<style>
+	.pagination-btn {
+		padding: 0.5rem 1rem;
+		border: 1px solid #ccc;
+		background-color: #fff;
+		border-radius: 4px;
+		cursor: pointer;
+		font-size: 0.95rem;
+		transition: all 0.2s ease;
+	}
+
+	.pagination-btn:hover:not(:disabled) {
+		background-color: #007bff;
+		color: white;
+		border-color: #007bff;
+	}
+
+	.pagination-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+		background-color: #f5f5f5;
+	}
+</style>
