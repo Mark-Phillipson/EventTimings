@@ -23,4 +23,12 @@
     <ProjectReference Include="..\EventTimings.App\EventTimings.App.csproj" />
   </ItemGroup>
 
+  <!-- Prevent shipping the development SQLite DB file during publish -->
+  <ItemGroup>
+    <Content Update="eventtimings.db">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Never</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>
