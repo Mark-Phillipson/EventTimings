@@ -7,30 +7,32 @@
     <h1>Officials</h1>
     <p class="muted">Manage official names and PIN credentials for timing operations.</p>
 
-    <div class="form-grid">
-        <label>
-            <span>Full name</span>
-            <input @bind="fullName" autocomplete="name" />
-        </label>
+    <form @onsubmit:preventDefault="true">
+        <div class="form-grid">
+            <label>
+                <span>Full name</span>
+                <input @bind="fullName" autocomplete="name" />
+            </label>
 
-        <label>
-            <span>PIN @(editingOfficialId is null ? "" : "(leave blank to keep current PIN)")</span>
-            <input @bind="pin" autocomplete="off" inputmode="numeric" type="password" />
-        </label>
+            <label>
+                <span>PIN @(editingOfficialId is null ? "" : "(leave blank to keep current PIN)")</span>
+                <input @bind="pin" autocomplete="off" inputmode="numeric" type="password" />
+            </label>
 
-        <label>
-            <span>Active</span>
-            <select @bind="isActiveText">
-                <option value="true">Yes</option>
-                <option value="false">No</option>
-            </select>
-        </label>
-    </div>
+            <label>
+                <span>Active</span>
+                <select @bind="isActiveText">
+                    <option value="true">Yes</option>
+                    <option value="false">No</option>
+                </select>
+            </label>
+        </div>
 
-    <div class="action-row">
-        <button class="primary-action" type="button" @onclick="SaveAsync" disabled="@isBusy">@(editingOfficialId is null ? "Add Official" : "Update Official")</button>
-        <button class="secondary-action" type="button" @onclick="ResetForm">Clear</button>
-    </div>
+        <div class="action-row">
+            <button class="primary-action" type="button" @onclick="SaveAsync" disabled="@isBusy">@(editingOfficialId is null ? "Add Official" : "Update Official")</button>
+            <button class="secondary-action" type="button" @onclick="ResetForm">Clear</button>
+        </div>
+    </form>
 
     @if (!string.IsNullOrWhiteSpace(statusMessage))
     {

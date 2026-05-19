@@ -31,7 +31,7 @@ else
 		</p>
 	</section>
 
-	<section class="panel grid-two">
+	<form class="panel grid-two" @onsubmit:preventDefault="true">
 		<div>
 			<h2>Official timing sign-in</h2>
 			<div class="form-grid">
@@ -89,7 +89,7 @@ else
 				</button>
 			</div>
 		</div>
-	</section>
+	</form>
 
 	<section class="panel">
 		<WaveManagement AllRiders="currentEvent.Riders" OnWaveStarted="OnWaveStarted" />
@@ -157,7 +157,7 @@ else
 	private int totalTimingSessions = 0;
 	private int totalPages = 0;
 	private string officialName = "Mark Phillipson";
-	private string pin = "2468";
+	private string pin = "";
 	private string riderSearchText = string.Empty;
 	private string selectedRiderId = string.Empty;
 	private string? statusMessage;
@@ -212,15 +212,25 @@ else
 			return;
 		}
 
+		if (!TryValidateTimingInput())
+		{
+			return;
+		}
+
 		activeAction = TimingAction.Start;
 		StateHasChanged();
 
 		try
 		{
 			var result = await ApiClient.StartTimingAsync(new TimingCommandRequest(currentEvent.EventCode, officialName, pin, selectedRiderId));
+			if (result is null)
+			{
+				throw new HttpRequestException("Timing API returned no response.");
+			}
+
 			apiReachable = true;
-			statusMessage = result?.Message ?? "Unable to reach the timing API.";
-			currentEvent = result?.Snapshot ?? currentEvent;
+			statusMessage = result.Message;
+			currentEvent = result.Snapshot ?? currentEvent;
 			await LoadTimingsPage(0); // Reload first page to show newest timing
 		}
 		catch (Exception)
@@ -242,15 +252,25 @@ else
 			return;
 		}
 
+		if (!TryValidateTimingInput())
+		{
+			return;
+		}
+
 		activeAction = TimingAction.Stop;
 		StateHasChanged();
 
 		try
 		{
 			var result = await ApiClient.StopTimingAsync(new TimingCommandRequest(currentEvent.EventCode, officialName, pin, selectedRiderId));
+			if (result is null)
+			{
+				throw new HttpRequestException("Timing API returned no response.");
+			}
+
 			apiReachable = true;
-			statusMessage = result?.Message ?? "Unable to reach the timing API.";
-			currentEvent = result?.Snapshot ?? currentEvent;
+			statusMessage = result.Message;
+			currentEvent = result.Snapshot ?? currentEvent;
 			await LoadTimingsPage(0); // Reload first page to ensure consistency
 		}
 		catch (Exception)
@@ -269,7 +289,8 @@ else
 	{
 		try
 		{
-			currentEvent = await ApiClient.GetCurrentEventAsync();
+			currentEvent = await ApiClient.GetCurrentEventAsync()
+				?? throw new HttpRequestException("Timing API returned no response.");
 			apiReachable = true;
 			riderSearchText = string.Empty;
 			selectedRiderId = currentEvent?.Riders.FirstOrDefault()?.RiderId ?? string.Empty;
@@ -296,9 +317,42 @@ else
 
 	private async Task OnWaveStarted(WaveStartResult result)
 	{
-		currentEvent = await ApiClient.GetCurrentEventAsync() ?? currentEvent;
-		statusMessage = $"Wave started — {result.StartedCount} rider(s) timed from {result.StartedAt.LocalDateTime.ToShortTimeString()}.";
-		await LoadTimingsPage(0); // Reset to first page to show new timings
+		try
+		{
+			currentEvent = await ApiClient.GetCurrentEventAsync()
+				?? throw new HttpRequestException("Timing API returned no response.");
+			apiReachable = true;
+			statusMessage = $"Wave started — {result.StartedCount} rider(s) timed from {result.StartedAt.LocalDateTime.ToShortTimeString()}.";
+			await LoadTimingsPage(0); // Reset to first page to show new timings
+		}
+		catch
+		{
+			apiReachable = false;
+			statusMessage = "Wave timing was started, but the API is currently unavailable for refresh.";
+		}
+	}
+
+	private bool TryValidateTimingInput()
+	{
+		if (string.IsNullOrWhiteSpace(officialName))
+		{
+			statusMessage = "Enter your official name before timing riders.";
+			return false;
+		}
+
+		if (string.IsNullOrWhiteSpace(pin))
+		{
+			statusMessage = "Enter your official PIN before timing riders.";
+			return false;
+		}
+
+		if (string.IsNullOrWhiteSpace(selectedRiderId))
+		{
+			statusMessage = "Choose a rider before starting or stopping timing.";
+			return false;
+		}
+
+		return true;
 	}
 
 	private enum TimingAction

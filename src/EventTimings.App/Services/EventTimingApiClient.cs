@@ -1,12 +1,16 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using EventTimings.Contracts;
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.Configuration;
 
 namespace EventTimings.App.Services;
 
-public sealed class EventTimingApiClient(IConfiguration configuration)
+public sealed class EventTimingApiClient(IConfiguration configuration, NavigationManager navigationManager)
 {
+    private const int MaxAttemptsPerBaseAddress = 2;
+
     public Task<EventSnapshot?> GetCurrentEventAsync(CancellationToken cancellationToken = default) =>
         SendWithFallbackAsync(client => client.GetFromJsonAsync<EventSnapshot>("api/event/current", cancellationToken), cancellationToken);
 
@@ -171,47 +175,83 @@ public sealed class EventTimingApiClient(IConfiguration configuration)
         SendWithFallbackAsync(async client =>
         {
             using var response = await client.PostAsJsonAsync(route, request, cancellationToken);
+
+            // Start/stop endpoints return a structured TimingCommandResult even on validation failures (400).
+            var result = await response.Content.ReadFromJsonAsync<TimingCommandResult>(cancellationToken);
+            if (result is not null)
+            {
+                return result;
+            }
+
             response.EnsureSuccessStatusCode();
-            return await response.Content.ReadFromJsonAsync<TimingCommandResult>(cancellationToken);
+            return null;
         }, cancellationToken);
 
     private async Task<T?> SendWithFallbackAsync<T>(Func<HttpClient, Task<T?>> sendAsync, CancellationToken cancellationToken)
     {
         foreach (var baseAddress in GetCandidateBaseAddresses())
         {
-            using var httpClient = new HttpClient { BaseAddress = baseAddress };
-
-            try
+            for (var attempt = 1; attempt <= MaxAttemptsPerBaseAddress; attempt++)
             {
-                var result = await sendAsync(httpClient);
-                if (result is not null)
+                using var httpClient = new HttpClient
                 {
-                    return result;
+                    BaseAddress = baseAddress,
+                    Timeout = TimeSpan.FromSeconds(15)
+                };
+
+                try
+                {
+                    var result = await sendAsync(httpClient);
+                    if (result is not null)
+                    {
+                        return result;
+                    }
+
+                    break;
                 }
-            }
-            catch (HttpRequestException)
-            {
-                continue;
-            }
-            catch (JsonException)
-            {
-                continue;
-            }
-            catch (NotSupportedException)
-            {
-                continue;
-            }
-            catch (TaskCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (TaskCanceledException)
-            {
-                continue;
+                catch (HttpRequestException ex) when (IsTransient(ex) && attempt < MaxAttemptsPerBaseAddress)
+                {
+                    await Task.Delay(TimeSpan.FromMilliseconds(200 * attempt), cancellationToken);
+                }
+                catch (HttpRequestException)
+                {
+                    break;
+                }
+                catch (JsonException)
+                {
+                    break;
+                }
+                catch (NotSupportedException)
+                {
+                    break;
+                }
+                catch (TaskCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (TaskCanceledException) when (attempt < MaxAttemptsPerBaseAddress)
+                {
+                    await Task.Delay(TimeSpan.FromMilliseconds(200 * attempt), cancellationToken);
+                }
+                catch (TaskCanceledException)
+                {
+                    break;
+                }
             }
         }
 
         return default;
+    }
+
+    private static bool IsTransient(HttpRequestException exception)
+    {
+        if (exception.StatusCode is null)
+        {
+            return true;
+        }
+
+        return exception.StatusCode is HttpStatusCode.RequestTimeout or HttpStatusCode.TooManyRequests
+            || (int)exception.StatusCode >= 500;
     }
 
     private IEnumerable<Uri> GetCandidateBaseAddresses()
@@ -223,6 +263,7 @@ public sealed class EventTimingApiClient(IConfiguration configuration)
             .Append(configuration["ApiBaseUrl"]);
 
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var appBaseUri = new Uri(navigationManager.BaseUri, UriKind.Absolute);
 
         foreach (var candidateUrl in candidateUrls)
         {
@@ -233,15 +274,25 @@ public sealed class EventTimingApiClient(IConfiguration configuration)
 
             var normalizedUrl = candidateUrl.EndsWith("/", StringComparison.Ordinal) ? candidateUrl : $"{candidateUrl}/";
 
-            if (!Uri.TryCreate(normalizedUrl, UriKind.Absolute, out var parsedUri))
+            if (!Uri.TryCreate(normalizedUrl, UriKind.RelativeOrAbsolute, out var parsedUri))
             {
                 continue;
+            }
+
+            if (!parsedUri.IsAbsoluteUri)
+            {
+                parsedUri = new Uri(appBaseUri, parsedUri);
             }
 
             if (seen.Add(parsedUri.AbsoluteUri))
             {
                 yield return parsedUri;
             }
+        }
+
+        if (seen.Add(appBaseUri.AbsoluteUri))
+        {
+            yield return appBaseUri;
         }
     }
 }
