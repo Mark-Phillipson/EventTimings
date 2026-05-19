@@ -761,7 +761,7 @@ internal sealed class TimingStore
             if (!dbContext.Officials.Any())
             {
                 var (markHash, markSalt) = PinHasher.HashPin("2468");
-                var (lornaHash, lornaSalt) = PinHasher.HashPin("1357");
+                var (lornaHash, lornaSalt) = PinHasher.HashPin("0707");
 
                 dbContext.Officials.AddRange(
                     new OfficialEntity
