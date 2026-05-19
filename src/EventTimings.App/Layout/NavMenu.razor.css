@@ -77,8 +77,25 @@
     }
 
     .nav-scrollable {
-        /* Allow sidebar to scroll for tall menus */
+        /* Make sidebar a column so footer can be pinned */
         height: calc(100vh - 3.5rem);
+        display: flex;
+        flex-direction: column;
+    }
+
+    .nav-scrollable nav {
+        flex: 1 1 auto;
         overflow-y: auto;
+    }
+
+    .nav-footer {
+        padding: 0.5rem 0.75rem;
+    }
+
+    .nav-footer-img {
+        max-height: 128px;
+        width: auto;
+        display: block;
+        object-fit: contain;
     }
 }
