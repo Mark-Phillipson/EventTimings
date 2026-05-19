@@ -106,6 +106,8 @@ resource webApp 'Microsoft.Web/sites@2024-11-01' = {
     httpsOnly: true
     siteConfig: {
       linuxFxVersion: 'DOTNETCORE|10.0'
+      alwaysOn: true
+      healthCheckPath: '/health'
       cors: {
         allowedOrigins: corsAllowedOrigins
       }
