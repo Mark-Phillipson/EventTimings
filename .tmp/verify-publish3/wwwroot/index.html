@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Event timing companion for cycling events and officials." />
+    <meta name="keywords" content="cycling, event timing, officials, race timing, EventTimings" />
+    <meta property="og:title" content="Event Timings" />
+    <meta property="og:description" content="Event timing companion for cycling events and officials." />
+    <meta property="og:type" content="website" />
+    <title>Event Timings</title>
+    <base href="/" />
+    <link rel="stylesheet" href="lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="css/app.css" />
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <link href="EventTimings.App.styles.css" rel="stylesheet" />
+    <link href="manifest.webmanifest" rel="manifest" />
+    <link rel="apple-touch-icon" sizes="512x512" href="icon-512.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+</head>
+
+<body>
+    <div id="app">
+        <div class="loading-spinner">
+            <span class="loading-emoji">🚴‍♀️</span>
+            <div class="loading-progress-text"></div>
+        </div>
+    </div>
+
+    <div id="blazor-error-ui">
+        An unhandled error has occurred.
+        <a href="." class="reload">Reload</a>
+        <span class="dismiss">🗙</span>
+    </div>
+    <script src="_framework/blazor.webassembly.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('service-worker.js', {
+                updateViaCache: 'none',
+                scope: '/'
+            }).then(registration => {
+                registration.update();
+            }).catch(error => {
+                console.error('Service Worker registration failed:', error);
+            });
+        }
+
+        window.downloadFileFromText = (fileName, content) => {
+            const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+            const objectUrl = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = objectUrl;
+            link.download = fileName;
+            link.click();
+            URL.revokeObjectURL(objectUrl);
+        };
+    </script>
+</body>
+
+</html>
