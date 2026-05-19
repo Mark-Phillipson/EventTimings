@@ -64,6 +64,7 @@ if (!app.Environment.IsDevelopment())
     app.UseForwardedHeaders();
     app.UseHttpsRedirection();
 }
+app.UseRouting();
 app.UseCors("client");
 app.UseBlazorFrameworkFiles();
 app.UseStaticFiles();
@@ -315,5 +316,11 @@ static string FormatElapsed(long? elapsedSeconds)
 }
 
 app.MapFallbackToFile("index.html");
+
+// Ensure CORS preflight requests for API routes are handled even when
+// the SPA fallback would otherwise match. This returns a 204 for
+// any OPTIONS request under /api/* so the CORS middleware can add
+// the appropriate headers.
+app.MapMethods("/api/{**slug}", new[] { "OPTIONS" }, () => Results.NoContent()).WithName("ApiOptions");
 
 app.Run();

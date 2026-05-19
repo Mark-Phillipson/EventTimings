@@ -313,12 +313,13 @@ else
 	}
 
 	private IEnumerable<RiderSummary> FilteredRiders =>
-		currentEvent?.Riders.Where(rider =>
-			string.IsNullOrWhiteSpace(riderSearchText) ||
-			rider.BibNumber.Contains(riderSearchText, StringComparison.OrdinalIgnoreCase) ||
-			rider.FullName.Contains(riderSearchText, StringComparison.OrdinalIgnoreCase) ||
-			rider.Category.Contains(riderSearchText, StringComparison.OrdinalIgnoreCase))
-		?? Array.Empty<RiderSummary>();
+		(currentEvent?.Riders ?? Array.Empty<RiderSummary>())
+			.Where(rider =>
+				string.IsNullOrWhiteSpace(riderSearchText) ||
+				rider.BibNumber.Contains(riderSearchText, StringComparison.OrdinalIgnoreCase) ||
+				rider.FullName.Contains(riderSearchText, StringComparison.OrdinalIgnoreCase) ||
+				rider.Category.Contains(riderSearchText, StringComparison.OrdinalIgnoreCase))
+			.OrderBy(rider => rider.FullName, StringComparer.OrdinalIgnoreCase);
 
 	private void OnRiderSearchInput(ChangeEventArgs args)
 	{
