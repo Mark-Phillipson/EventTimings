@@ -51,7 +51,7 @@ else
 			<h2>Rider timing</h2>
 			<label>
 				<span>Search rider</span>
-				<input @bind="riderSearchText" @bind:event="oninput" placeholder="Type a bib number, name, or category" />
+				<input value="@riderSearchText" @oninput="OnRiderSearchInput" placeholder="Type a bib number, name, or category" />
 			</label>
 			<label>
 				<span>Select rider to time</span>
@@ -212,6 +212,8 @@ else
 			return;
 		}
 
+		EnsureSelectedRiderIsVisible();
+
 		if (!TryValidateTimingInput())
 		{
 			return;
@@ -251,6 +253,8 @@ else
 		{
 			return;
 		}
+
+		EnsureSelectedRiderIsVisible();
 
 		if (!TryValidateTimingInput())
 		{
@@ -294,6 +298,7 @@ else
 			apiReachable = true;
 			riderSearchText = string.Empty;
 			selectedRiderId = currentEvent?.Riders.FirstOrDefault()?.RiderId ?? string.Empty;
+			EnsureSelectedRiderIsVisible();
 			statusMessage = null;
 			await LoadTimingsPage(0);
 		}
@@ -315,6 +320,33 @@ else
 			rider.Category.Contains(riderSearchText, StringComparison.OrdinalIgnoreCase))
 		?? Array.Empty<RiderSummary>();
 
+	private void OnRiderSearchInput(ChangeEventArgs args)
+	{
+		riderSearchText = args.Value?.ToString() ?? string.Empty;
+		EnsureSelectedRiderIsVisible();
+	}
+
+	private void EnsureSelectedRiderIsVisible()
+	{
+		if (currentEvent is null)
+		{
+			selectedRiderId = string.Empty;
+			return;
+		}
+
+		var filtered = FilteredRiders.ToList();
+		if (filtered.Count == 0)
+		{
+			selectedRiderId = string.Empty;
+			return;
+		}
+
+		if (!filtered.Any(rider => rider.RiderId == selectedRiderId))
+		{
+			selectedRiderId = filtered[0].RiderId;
+		}
+	}
+
 	private async Task OnWaveStarted(WaveStartResult result)
 	{
 		try
@@ -322,6 +354,7 @@ else
 			currentEvent = await ApiClient.GetCurrentEventAsync()
 				?? throw new HttpRequestException("Timing API returned no response.");
 			apiReachable = true;
+			EnsureSelectedRiderIsVisible();
 			statusMessage = $"Wave started — {result.StartedCount} rider(s) timed from {result.StartedAt.LocalDateTime.ToShortTimeString()}.";
 			await LoadTimingsPage(0); // Reset to first page to show new timings
 		}
