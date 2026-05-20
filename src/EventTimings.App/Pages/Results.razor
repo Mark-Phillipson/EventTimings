@@ -1,6 +1,8 @@
 @page "/results"
 @inject EventTimingApiClient ApiClient
 @inject IJSRuntime JsRuntime
+@inject EventTimings.App.Services.CredentialState credentialState
+@using EventTimings.Contracts
 
 <PageTitle>Results</PageTitle>
 
@@ -11,6 +13,10 @@
     <div class="action-row">
         <button class="secondary-action" type="button" @onclick="LoadAsync" disabled="@isLoading">Refresh</button>
         <button class="primary-action" type="button" @onclick="ExportCsvAsync" disabled="@isExporting">Export CSV</button>
+        @if (credentialState.IsAuthenticated)
+        {
+            <button class="secondary-action" type="button" @onclick="ShowResetModal" disabled="@isResetting">Reset</button>
+        }
     </div>
 
     @if (!string.IsNullOrWhiteSpace(statusMessage))
@@ -68,6 +74,10 @@
     private string? statusMessage;
     private bool isLoading;
     private bool isExporting;
+    private bool showResetModal;
+    private string resetPin = string.Empty;
+    private bool isResetting;
+    private string? resetStatusMessage;
 
     private int finishedCount => rows.Count(row => row.Status == "Finished");
 
@@ -140,4 +150,96 @@
             ? "-"
             : TimeSpan.FromSeconds(elapsedSeconds.Value).ToString(@"hh\:mm\:ss");
     }
+
+    private void ShowResetModal()
+    {
+        resetPin = string.Empty;
+        resetStatusMessage = null;
+        showResetModal = true;
+    }
+
+    private void CloseResetModal()
+    {
+        showResetModal = false;
+        resetPin = string.Empty;
+        resetStatusMessage = null;
+    }
+
+    private async Task ConfirmResetAsync()
+    {
+        isResetting = true;
+        resetStatusMessage = null;
+
+        try
+        {
+            // re-verify PIN
+            var verify = await ApiClient.VerifyOfficialAsync(new OfficialVerificationRequest(credentialState.OfficialName, resetPin));
+            if (verify is null || !verify.Success)
+            {
+                resetStatusMessage = verify?.Message ?? "Verification failed.";
+                return;
+            }
+
+            var currentEvent = await ApiClient.GetCurrentEventAsync();
+            var eventCode = currentEvent?.EventCode ?? string.Empty;
+
+            var req = new TimingCommandRequest(eventCode, credentialState.OfficialName, resetPin, string.Empty);
+            var result = await ApiClient.ResetTimingsAsync(req);
+            if (result is not null && result.Success)
+            {
+                showResetModal = false;
+                await LoadAsync();
+                statusMessage = result.Message;
+            }
+            else
+            {
+                resetStatusMessage = result?.Message ?? "Reset failed.";
+            }
+        }
+        catch
+        {
+            resetStatusMessage = "Reset failed — API not reachable.";
+        }
+        finally
+        {
+            isResetting = false;
+        }
+    }
+}
+
+@* Reset PIN modal *@
+@if (showResetModal)
+{
+    <div class="modal-backdrop">
+        <div class="modal-dialog modal-centered">
+            <div class="panel">
+                <h3>Confirm reset</h3>
+                <p class="muted">This will clear all recorded start and stop times for the event. Participants will not be deleted.</p>
+
+                <div class="form-grid">
+                    <label>
+                        <span>Enter PIN to confirm</span>
+                        <input @bind="resetPin" inputmode="numeric" type="password" maxlength="4" />
+                    </label>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(resetStatusMessage))
+                {
+                    <p class="muted">@resetStatusMessage</p>
+                }
+
+                <div class="action-row">
+                    <button class="secondary-action" @onclick="CloseResetModal" disabled="@isResetting">Cancel</button>
+                    <button class="primary-action" @onclick="ConfirmResetAsync" disabled="@(isResetting || string.IsNullOrWhiteSpace(resetPin))">Confirm reset</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        .modal-backdrop { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.5); z-index: 100000; pointer-events: auto; }
+        .modal-dialog.modal-centered { max-width: 420px; width: 100%; z-index: 100001; pointer-events: auto; }
+        .modal-dialog .panel { padding: 1rem; pointer-events: auto; }
+        .modal-backdrop .modal-dialog * { pointer-events: auto; }
+    </style>
 }

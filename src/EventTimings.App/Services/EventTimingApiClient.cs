@@ -145,6 +145,9 @@ public sealed class EventTimingApiClient(IConfiguration configuration, Navigatio
             return await response.Content.ReadFromJsonAsync<OfficialVerificationResult>(cancellationToken);
         }, cancellationToken);
 
+    public Task<TimingCommandResult?> ResetTimingsAsync(TimingCommandRequest request, CancellationToken cancellationToken = default) =>
+        PostTimingCommandAsync("api/admin/timings/reset", request, cancellationToken);
+
     public Task<OfficialDto?> CreateOfficialAsync(OfficialCreateRequest request, CancellationToken cancellationToken = default) =>
         SendWithFallbackAsync(async client =>
         {
@@ -273,6 +276,15 @@ public sealed class EventTimingApiClient(IConfiguration configuration, Navigatio
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var appBaseUri = new Uri(navigationManager.BaseUri, UriKind.Absolute);
 
+        if (seen.Add(appBaseUri.AbsoluteUri))
+        {
+            yield return appBaseUri;
+        }
+
+        var appIsLocal = appBaseUri.IsLoopback
+            || string.Equals(appBaseUri.Host, "localhost", StringComparison.OrdinalIgnoreCase)
+            || appBaseUri.Host.StartsWith("127.", StringComparison.OrdinalIgnoreCase);
+
         foreach (var candidateUrl in candidateUrls)
         {
             if (string.IsNullOrWhiteSpace(candidateUrl))
@@ -292,15 +304,15 @@ public sealed class EventTimingApiClient(IConfiguration configuration, Navigatio
                 parsedUri = new Uri(appBaseUri, parsedUri);
             }
 
+            if (!appIsLocal && (parsedUri.IsLoopback || string.Equals(parsedUri.Host, "localhost", StringComparison.OrdinalIgnoreCase) || parsedUri.Host.StartsWith("127.", StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
             if (seen.Add(parsedUri.AbsoluteUri))
             {
                 yield return parsedUri;
             }
-        }
-
-        if (seen.Add(appBaseUri.AbsoluteUri))
-        {
-            yield return appBaseUri;
         }
     }
 }

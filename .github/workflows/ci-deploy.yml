@@ -1,0 +1,50 @@
+name: CI Deploy
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    env:
+      AZD_ENV_NAME: dev
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --configuration Release
+
+      - name: Publish API
+        run: dotnet publish src/EventTimings.Api/EventTimings.Api.csproj -c Release -o ./publish/EventTimings.Api
+
+      - name: Publish App
+        run: dotnet publish src/EventTimings.App/EventTimings.App.csproj -c Release -o ./publish/EventTimings.App
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Install Azure Developer CLI (azd)
+        run: |
+          curl -sL https://aka.ms/install-azd | bash
+
+      - name: Show azd version
+        run: azd version || true
+
+      - name: Deploy with azd
+        run: azd up --output json --environment ${{ env.AZD_ENV_NAME }}
+        env:
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}

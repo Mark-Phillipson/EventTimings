@@ -145,6 +145,31 @@ internal sealed class TimingStore
         }
     }
 
+    public TimingCommandResult ResetAllTimings(TimingCommandRequest request)
+    {
+        // Verify official credentials first (uses its own DB context)
+        var (official, verifyError) = VerifyOfficial(new OfficialVerificationRequest(request.OfficialName, request.Pin));
+
+        lock (syncRoot)
+        {
+            using var dbContext = dbContextFactory.CreateDbContext();
+
+            if (official is null)
+            {
+                return new TimingCommandResult(false, verifyError ?? "The official name or PIN is not recognized.", CreateSnapshot(dbContext));
+            }
+
+            var cleared = timingSessions.Count;
+            if (cleared > 0)
+            {
+                timingSessions.Clear();
+                UpdateAuditTrail(request.OfficialName);
+            }
+
+            return new TimingCommandResult(true, $"Cleared {cleared} timing session(s).", CreateSnapshot(dbContext));
+        }
+    }
+
     public ImportResults ImportParticipants(IEnumerable<RiderImportDto> imports)
     {
         lock (syncRoot)

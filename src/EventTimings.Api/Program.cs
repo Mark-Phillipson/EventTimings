@@ -286,6 +286,14 @@ app.MapPost("/api/admin/officials/verify", (OfficialVerificationRequest request,
 })
     .WithName("VerifyOfficial");
 
+// Admin: reset/clear all timing sessions (requires official verification)
+app.MapPost("/api/admin/timings/reset", (TimingCommandRequest request, TimingStore store) =>
+{
+    var result = store.ResetAllTimings(request);
+    return result.Success ? Results.Ok(result) : Results.BadRequest(result);
+})
+    .WithName("ResetAllTimings");
+
 static string BuildFinishedTimesCsv(IReadOnlyList<FinishedTimeReportRowDto> rows)
 {
     var builder = new StringBuilder();

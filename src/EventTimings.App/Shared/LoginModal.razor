@@ -11,10 +11,16 @@
     private string pin = string.Empty;
     private string? statusMessage;
     private bool isBusy;
+    private bool officialsLoading = true;
+    private bool officialsLoadFailed = false;
 
     protected override async Task OnInitializedAsync()
     {
+        officialsLoading = true;
+        officialsLoadFailed = false;
         await LoadOfficials();
+        officialsLoading = false;
+        officialsLoadFailed = officials.Count == 0;
         credentialState.OnChange += OnCredentialChanged;
     }
 
@@ -26,11 +32,18 @@
             if (fetched is not null)
             {
                 officials = fetched.OrderBy(o => o.FullName).ToList();
+                // if none, leave officials empty and let the UI offer a retry
             }
         }
         catch
         {
-            // ignore — modal will show an error when trying to verify
+            officials = new();
+            officialsLoadFailed = true;
+        }
+        finally
+        {
+            officialsLoading = false;
+            await InvokeAsync(StateHasChanged);
         }
     }
 
@@ -74,6 +87,7 @@
         finally
         {
             isBusy = false;
+            await InvokeAsync(StateHasChanged);
         }
     }
 
@@ -92,32 +106,57 @@
         <div class="modal-dialog modal-centered">
             <div class="panel">
                 <h3>Official sign-in</h3>
-                <div class="form-grid">
-                    <label>
-                        <span>Name</span>
-                        <select @bind="selectedOfficial">
-                            <option value="">Select official</option>
-                            @foreach (var o in officials)
-                            {
-                                <option value="@o.FullName">@o.FullName</option>
-                            }
-                        </select>
-                    </label>
 
-                    <label>
-                        <span>PIN</span>
-                        <input @bind="pin" inputmode="numeric" type="password" maxlength="4" />
-                    </label>
-                </div>
-
-                @if (!string.IsNullOrWhiteSpace(statusMessage))
+                @if (officialsLoading)
                 {
-                    <p class="muted">@statusMessage</p>
+                    <div class="centered-loading">
+                        <div class="spinner-border" role="status" aria-hidden="true"></div>
+                        <p class="muted">Loading officials…</p>
+                    </div>
                 }
+                else if (officials.Count == 0)
+                {
+                    <p class="muted">No officials found. <button class="link-button" @onclick="LoadOfficials">Retry</button></p>
+                }
+                else
+                {
+                    <div class="form-grid">
+                        <label>
+                            <span>Name</span>
+                            <select @bind="selectedOfficial" disabled="@isBusy">
+                                <option value="">Select official</option>
+                                @foreach (var o in officials)
+                                {
+                                    <option value="@o.FullName">@o.FullName</option>
+                                }
+                            </select>
+                        </label>
 
-                <div class="action-row">
-                    <button class="primary-action" @onclick="VerifyAsync" disabled="@isBusy">Sign in</button>
-                </div>
+                        <label>
+                            <span>PIN</span>
+                            <input @bind="pin" inputmode="numeric" type="password" maxlength="4" disabled="@isBusy" />
+                        </label>
+                    </div>
+
+                    @if (!string.IsNullOrWhiteSpace(statusMessage))
+                    {
+                        <p class="muted">@statusMessage</p>
+                    }
+
+                    <div class="action-row">
+                        <button class="primary-action" @onclick="VerifyAsync" disabled="@(isBusy || officialsLoading)">
+                            @if (isBusy)
+                            {
+                                <span class="spinner-border spinner-border-sm button-spinner" role="status" aria-hidden="true"></span>
+                                <span> Signing in…</span>
+                            }
+                            else
+                            {
+                                <span>Sign in</span>
+                            }
+                        </button>
+                    </div>
+                }
             </div>
         </div>
     </div>
