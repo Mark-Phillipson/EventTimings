@@ -1,5 +1,6 @@
 @page "/officials"
 @inject EventTimingApiClient ApiClient
+@inject EventTimings.App.Services.CredentialState credentialState
 
 <PageTitle>Officials</PageTitle>
 
@@ -79,7 +80,28 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadAsync();
+        if (credentialState.IsAuthenticated)
+        {
+            await LoadAsync();
+        }
+        else
+        {
+            // Wait for authentication and then load
+            void Handler()
+            {
+                if (credentialState.IsAuthenticated)
+                {
+                    _ = InvokeAsync(async () =>
+                    {
+                        await LoadAsync();
+                        StateHasChanged();
+                    });
+                    credentialState.OnChange -= Handler;
+                }
+            }
+
+            credentialState.OnChange += Handler;
+        }
     }
 
     private async Task LoadAsync()

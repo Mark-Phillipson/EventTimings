@@ -20,4 +20,9 @@
     <ProjectReference Include="..\EventTimings.Contracts\EventTimings.Contracts.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Watch Remove="**/bin/**" />
+    <Watch Remove="**/obj/**" />
+  </ItemGroup>
+
 </Project>

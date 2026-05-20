@@ -137,6 +137,14 @@ public sealed class EventTimingApiClient(IConfiguration configuration, Navigatio
     public Task<IReadOnlyList<OfficialDto>?> GetOfficialsAsync(CancellationToken cancellationToken = default) =>
         SendWithFallbackAsync(client => client.GetFromJsonAsync<IReadOnlyList<OfficialDto>>("api/admin/officials", cancellationToken), cancellationToken);
 
+    public Task<OfficialVerificationResult?> VerifyOfficialAsync(OfficialVerificationRequest request, CancellationToken cancellationToken = default) =>
+        SendWithFallbackAsync(async client =>
+        {
+            using var response = await client.PostAsJsonAsync("api/admin/officials/verify", request, cancellationToken);
+            // The API returns a structured OfficialVerificationResult even on 400/401, so read the body.
+            return await response.Content.ReadFromJsonAsync<OfficialVerificationResult>(cancellationToken);
+        }, cancellationToken);
+
     public Task<OfficialDto?> CreateOfficialAsync(OfficialCreateRequest request, CancellationToken cancellationToken = default) =>
         SendWithFallbackAsync(async client =>
         {

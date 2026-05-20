@@ -144,3 +144,12 @@ public sealed record PagedTimingSessionsDto(
 	int TotalCount,
 	int Page,
 	int PageSize);
+
+public sealed record OfficialVerificationRequest(
+	string FullName,
+	string Pin);
+
+public sealed record OfficialVerificationResult(
+	bool Success,
+	string? Message,
+	OfficialDto? Official);

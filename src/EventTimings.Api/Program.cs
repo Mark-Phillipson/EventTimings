@@ -274,6 +274,18 @@ app.MapDelete("/api/admin/officials/{officialId}", (string officialId, TimingSto
 })
     .WithName("DeleteOfficial");
 
+app.MapPost("/api/admin/officials/verify", (OfficialVerificationRequest request, TimingStore store) =>
+{
+    var (official, error) = store.VerifyOfficial(request);
+    if (official is not null)
+    {
+        return Results.Ok(new OfficialVerificationResult(true, "Verified", official));
+    }
+
+    return Results.BadRequest(new OfficialVerificationResult(false, error ?? "Invalid credentials", null));
+})
+    .WithName("VerifyOfficial");
+
 static string BuildFinishedTimesCsv(IReadOnlyList<FinishedTimeReportRowDto> rows)
 {
     var builder = new StringBuilder();

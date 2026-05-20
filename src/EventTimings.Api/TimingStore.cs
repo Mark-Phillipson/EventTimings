@@ -728,6 +728,28 @@ internal sealed class TimingStore
         }
     }
 
+    public (OfficialDto? Official, string? Error) VerifyOfficial(OfficialVerificationRequest request)
+    {
+        lock (syncRoot)
+        {
+            using var dbContext = dbContextFactory.CreateDbContext();
+
+            if (string.IsNullOrWhiteSpace(request.FullName) || string.IsNullOrWhiteSpace(request.Pin))
+            {
+                return (null, "Name and PIN are required.");
+            }
+
+            var fullName = request.FullName.Trim();
+            var official = dbContext.Officials.FirstOrDefault(item => item.FullName == fullName && item.IsActive);
+            if (official is null || !PinHasher.VerifyPin(request.Pin.Trim(), official.PinHash, official.PinSalt))
+            {
+                return (null, "The official name or PIN is not recognized.");
+            }
+
+            return (new OfficialDto(official.OfficialId, official.FullName, official.IsActive, official.UpdatedAt), null);
+        }
+    }
+
     private void EnsureDatabaseInitialized()
     {
         lock (syncRoot)

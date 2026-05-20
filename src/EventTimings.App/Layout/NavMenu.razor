@@ -1,4 +1,7 @@
-﻿<div class="top-row ps-3 navbar navbar-dark">
+﻿@inject EventTimings.App.Services.CredentialState credentialState
+@implements IDisposable
+
+<div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
         <a class="navbar-brand" href="">Event Timings</a>
         <button title="Navigation menu" class="navbar-toggler" @onclick="ToggleNavMenu">
@@ -15,24 +18,75 @@
             </NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="riders" Match="NavLinkMatch.Prefix">
-                <span class="bi bi-people-fill" aria-hidden="true"></span> Riders
-            </NavLink>
+            @if (credentialState.IsAuthenticated)
+            {
+                <NavLink class="nav-link" href="riders" Match="NavLinkMatch.Prefix">
+                    <span class="bi bi-people-fill" aria-hidden="true"></span> Riders
+                </NavLink>
+            }
+            else
+            {
+                <a class="nav-link disabled" tabindex="-1" aria-disabled="true">
+                    <span class="bi bi-people-fill" aria-hidden="true"></span> Riders
+                </a>
+            }
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="route-types" Match="NavLinkMatch.Prefix">
-                <span class="bi bi-signpost-split-fill" aria-hidden="true"></span> Route types
-            </NavLink>
+            @if (credentialState.IsAuthenticated)
+            {
+                <NavLink class="nav-link" href="route-types" Match="NavLinkMatch.Prefix">
+                    <span class="bi bi-signpost-split-fill" aria-hidden="true"></span> Route types
+                </NavLink>
+            }
+            else
+            {
+                <a class="nav-link disabled" tabindex="-1" aria-disabled="true">
+                    <span class="bi bi-signpost-split-fill" aria-hidden="true"></span> Route types
+                </a>
+            }
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="results" Match="NavLinkMatch.Prefix">
-                <span class="bi bi-clipboard-data-fill" aria-hidden="true"></span> Results
-            </NavLink>
+            @if (credentialState.IsAuthenticated)
+            {
+                <NavLink class="nav-link" href="results" Match="NavLinkMatch.Prefix">
+                    <span class="bi bi-clipboard-data-fill" aria-hidden="true"></span> Results
+                </NavLink>
+            }
+            else
+            {
+                <a class="nav-link disabled" tabindex="-1" aria-disabled="true">
+                    <span class="bi bi-clipboard-data-fill" aria-hidden="true"></span> Results
+                </a>
+            }
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="usage" Match="NavLinkMatch.Prefix">
-                <span class="bi bi-question-circle-fill" aria-hidden="true"></span> Usage
-            </NavLink>
+            @if (credentialState.IsAuthenticated)
+            {
+                <NavLink class="nav-link" href="usage" Match="NavLinkMatch.Prefix">
+                    <span class="bi bi-question-circle-fill" aria-hidden="true"></span> Usage
+                </NavLink>
+            }
+            else
+            {
+                <a class="nav-link disabled" tabindex="-1" aria-disabled="true">
+                    <span class="bi bi-question-circle-fill" aria-hidden="true"></span> Usage
+                </a>
+            }
+        </div>
+
+        <div class="nav-item px-3">
+            @if (credentialState.IsAuthenticated)
+            {
+                <NavLink class="nav-link" href="officials" Match="NavLinkMatch.Prefix">
+                    <span class="bi bi-shield-lock-fill" aria-hidden="true"></span> Officials
+                </NavLink>
+            }
+            else
+            {
+                <a class="nav-link disabled" tabindex="-1" aria-disabled="true">
+                    <span class="bi bi-shield-lock-fill" aria-hidden="true"></span> Officials
+                </a>
+            }
         </div>
     </nav>
     <div class="nav-footer px-3 py-2 d-flex align-items-center justify-content-center" @onclick:stopPropagation="true">
@@ -48,5 +102,17 @@
     private void ToggleNavMenu()
     {
         collapseNavMenu = !collapseNavMenu;
+    }
+
+    protected override void OnInitialized()
+    {
+        credentialState.OnChange += OnCredentialChanged;
+    }
+
+    private void OnCredentialChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        credentialState.OnChange -= OnCredentialChanged;
     }
 }

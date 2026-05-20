@@ -1,5 +1,8 @@
 @page "/"
 @inject EventTimingApiClient ApiClient
+@inject EventTimings.App.Services.CredentialState credentialState
+@implements IDisposable
+@using EventTimings.Contracts
 
 <PageTitle>Event Timing Board</PageTitle>
 
@@ -32,22 +35,7 @@ else
 	</section>
 
 	<form class="panel grid-two" @onsubmit:preventDefault="true">
-		<div>
-			<h2>Official timing sign-in</h2>
-			<div class="form-grid">
-				<label>
-					<span>Name</span>
-					<input @bind="officialName" autocomplete="name" />
-				</label>
-
-				<label>
-					<span>PIN</span>
-					<input @bind="pin" autocomplete="off" inputmode="numeric" type="password" />
-				</label>
-			</div>
-		</div>
-
-		<div>
+		<div style="grid-column: 1 / -1;">
 			<h2>Rider timing</h2>
 			<label>
 				<span>Search rider</span>
@@ -64,8 +52,8 @@ else
 			</label>
 			<p class="muted rider-count">@FilteredRiders.Count() of @currentEvent.Riders.Count riders shown</p>
 
-			<div class="action-row">
-				<button class="primary-action" type="button" disabled="@(activeAction is not TimingAction.None)" @onclick="StartTiming">
+                <div class="action-row">
+                	<button class="primary-action" type="button" disabled="@((activeAction is not TimingAction.None) || !credentialState.IsAuthenticated)" @onclick="StartTiming">
 					@if (activeAction == TimingAction.Start)
 					{
 						<span class="spinner-border spinner-border-sm button-spinner" role="status" aria-hidden="true"></span>
@@ -76,7 +64,7 @@ else
 						<span>Start</span>
 					}
 				</button>
-				<button class="secondary-action" type="button" disabled="@(activeAction is not TimingAction.None)" @onclick="StopTiming">
+                 	<button class="secondary-action" type="button" disabled="@((activeAction is not TimingAction.None) || !credentialState.IsAuthenticated)" @onclick="StopTiming">
 					@if (activeAction == TimingAction.Stop)
 					{
 						<span class="spinner-border spinner-border-sm button-spinner" role="status" aria-hidden="true"></span>
@@ -156,8 +144,9 @@ else
 	private int currentPage = 0;
 	private int totalTimingSessions = 0;
 	private int totalPages = 0;
-	private string officialName = "Mark Phillipson";
+	private string officialName = string.Empty;
 	private string pin = "";
+	private List<OfficialDto> officials = new();
 	private string riderSearchText = string.Empty;
 	private string selectedRiderId = string.Empty;
 	private string? statusMessage;
@@ -166,7 +155,29 @@ else
 
 	protected override async Task OnInitializedAsync()
 	{
+		credentialState.OnChange += OnCredentialChanged;
 		await RefreshAsync();
+		if (credentialState.IsAuthenticated && credentialState.AuthenticatedOfficial is not null)
+		{
+			officialName = credentialState.AuthenticatedOfficial.FullName;
+			pin = credentialState.Pin;
+		}
+	}
+
+	private void OnCredentialChanged()
+	{
+		if (credentialState.IsAuthenticated && credentialState.AuthenticatedOfficial is not null)
+		{
+			officialName = credentialState.AuthenticatedOfficial.FullName;
+			pin = credentialState.Pin;
+		}
+
+		InvokeAsync(StateHasChanged);
+	}
+
+	public void Dispose()
+	{
+		credentialState.OnChange -= OnCredentialChanged;
 	}
 
 	private async Task LoadTimingsPage(int page)
@@ -295,6 +306,12 @@ else
 		{
 			currentEvent = await ApiClient.GetCurrentEventAsync()
 				?? throw new HttpRequestException("Timing API returned no response.");
+			// Load list of current officials for the dropdown
+			var fetchedOfficials = await ApiClient.GetOfficialsAsync();
+			if (fetchedOfficials is not null)
+			{
+				officials = fetchedOfficials.ToList();
+			}
 			apiReachable = true;
 			riderSearchText = string.Empty;
 			selectedRiderId = currentEvent?.Riders.FirstOrDefault()?.RiderId ?? string.Empty;

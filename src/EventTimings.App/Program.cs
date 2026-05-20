@@ -8,5 +8,6 @@ builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
 
 builder.Services.AddScoped<EventTimingApiClient>();
+builder.Services.AddScoped<CredentialState>();
 
 await builder.Build().RunAsync();

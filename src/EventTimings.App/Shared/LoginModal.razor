@@ -1,0 +1,144 @@
+@inject EventTimingApiClient ApiClient
+@inject EventTimings.App.Services.CredentialState credentialState
+@inject Microsoft.JSInterop.IJSRuntime jsRuntime
+
+@using EventTimings.Contracts
+@implements IDisposable
+
+@code {
+    private List<OfficialDto> officials = new();
+    private string selectedOfficial = string.Empty;
+    private string pin = string.Empty;
+    private string? statusMessage;
+    private bool isBusy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadOfficials();
+        credentialState.OnChange += OnCredentialChanged;
+    }
+
+    private async Task LoadOfficials()
+    {
+        try
+        {
+            var fetched = await ApiClient.GetOfficialsAsync();
+            if (fetched is not null)
+            {
+                officials = fetched.OrderBy(o => o.FullName).ToList();
+            }
+        }
+        catch
+        {
+            // ignore — modal will show an error when trying to verify
+        }
+    }
+
+    private async Task VerifyAsync()
+    {
+        statusMessage = null;
+        if (string.IsNullOrWhiteSpace(selectedOfficial))
+        {
+            statusMessage = "Select your name.";
+            return;
+        }
+
+        if (!System.Text.RegularExpressions.Regex.IsMatch(pin ?? string.Empty, "^\\d{4}$"))
+        {
+            statusMessage = "Enter a 4-digit PIN.";
+            return;
+        }
+
+        isBusy = true;
+        try
+        {
+            try { await jsRuntime.InvokeVoidAsync("console.log", "LoginModal.VerifyAsync:start", selectedOfficial, pin); } catch { }
+            var req = new OfficialVerificationRequest(selectedOfficial, pin);
+            var result = await ApiClient.VerifyOfficialAsync(req);
+            try { await jsRuntime.InvokeVoidAsync("console.log", "LoginModal.VerifyAsync:result", result?.Success ?? false, result?.Message ?? string.Empty); } catch { }
+            if (result is not null && result.Success && result.Official is not null)
+            {
+                // retain the verified PIN in memory for the session so timing commands can use it
+                credentialState.MarkAuthenticated(result.Official, pin);
+                statusMessage = null;
+            }
+            else
+            {
+                statusMessage = result?.Message ?? "Verification failed.";
+            }
+        }
+        catch
+        {
+            statusMessage = "Verification failed — API not reachable.";
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private void OnCredentialChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        credentialState.OnChange -= OnCredentialChanged;
+    }
+}
+
+@* Render modal when not authenticated *@
+@if (!credentialState.IsAuthenticated)
+{
+    <div class="modal-backdrop">
+        <div class="modal-dialog modal-centered">
+            <div class="panel">
+                <h3>Official sign-in</h3>
+                <div class="form-grid">
+                    <label>
+                        <span>Name</span>
+                        <select @bind="selectedOfficial">
+                            <option value="">Select official</option>
+                            @foreach (var o in officials)
+                            {
+                                <option value="@o.FullName">@o.FullName</option>
+                            }
+                        </select>
+                    </label>
+
+                    <label>
+                        <span>PIN</span>
+                        <input @bind="pin" inputmode="numeric" type="password" maxlength="4" />
+                    </label>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(statusMessage))
+                {
+                    <p class="muted">@statusMessage</p>
+                }
+
+                <div class="action-row">
+                    <button class="primary-action" @onclick="VerifyAsync" disabled="@isBusy">Sign in</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0,0,0,0.5);
+        z-index: 100000; /* ensure modal sits above app elements */
+        pointer-events: auto;
+    }
+
+    .modal-dialog.modal-centered { max-width: 420px; width: 100%; z-index: 100001; pointer-events: auto; }
+
+    .modal-dialog .panel { padding: 1rem; pointer-events: auto; }
+
+    /* Ensure all form controls inside the modal accept pointer events */
+    .modal-backdrop .modal-dialog * { pointer-events: auto; }
+</style>

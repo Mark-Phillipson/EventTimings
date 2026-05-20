@@ -1,0 +1,75 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build: EventTimings.Api",
+      "type": "shell",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/src/EventTimings.Api/EventTimings.Api.csproj",
+        "--configuration",
+        "Debug"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": "$msCompile",
+      "presentation": { "reveal": "silent" }
+    },
+    {
+      "label": "run: EventTimings.Api",
+      "type": "shell",
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--project",
+        "${workspaceFolder}/src/EventTimings.Api/EventTimings.Api.csproj",
+        "--configuration",
+        "Debug",
+        "--no-build"
+      ],
+      "dependsOn": "build: EventTimings.Api",
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "build: EventTimings.App",
+      "type": "shell",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/src/EventTimings.App/EventTimings.App.csproj",
+        "--configuration",
+        "Debug"
+      ],
+      "group": "build",
+      "problemMatcher": "$msCompile",
+      "presentation": { "reveal": "silent" }
+    },
+    {
+      "label": "watch: EventTimings.App",
+      "type": "shell",
+      "command": "dotnet",
+      "args": [
+        "watch",
+        "--project",
+        "${workspaceFolder}/src/EventTimings.App/EventTimings.App.csproj",
+        "run",
+        "--configuration",
+        "Debug"
+      ],
+      "dependsOn": "build: EventTimings.App",
+      "isBackground": true,
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "dev: run API + App",
+      "dependsOn": [
+        "run: EventTimings.Api",
+        "watch: EventTimings.App"
+      ],
+      "dependsOrder": "parallel"
+    }
+  ]
+}
