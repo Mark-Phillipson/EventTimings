@@ -65,6 +65,23 @@ if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 }
 app.UseRouting();
+// Request/response logging: enabled for local debugging to help diagnose client fetches
+app.Use(async (context, next) =>
+{
+    try
+    {
+        Console.WriteLine($"[REQ] {DateTimeOffset.Now:HH:mm:ss} {context.Request.Method} {context.Request.Path}{context.Request.QueryString}");
+    }
+    catch { }
+
+    await next();
+
+    try
+    {
+        Console.WriteLine($"[RES] {DateTimeOffset.Now:HH:mm:ss} {context.Response.StatusCode} for {context.Request.Method} {context.Request.Path}");
+    }
+    catch { }
+});
 app.UseCors("client");
 app.UseBlazorFrameworkFiles();
 app.UseStaticFiles();

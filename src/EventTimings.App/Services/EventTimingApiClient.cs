@@ -272,19 +272,14 @@ public sealed class EventTimingApiClient(IConfiguration configuration, Navigatio
             .GetChildren()
             .Select(item => item.Value)
             .Append(configuration["ApiBaseUrl"]);
-
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var appBaseUri = new Uri(navigationManager.BaseUri, UriKind.Absolute);
-
-        if (seen.Add(appBaseUri.AbsoluteUri))
-        {
-            yield return appBaseUri;
-        }
 
         var appIsLocal = appBaseUri.IsLoopback
             || string.Equals(appBaseUri.Host, "localhost", StringComparison.OrdinalIgnoreCase)
             || appBaseUri.Host.StartsWith("127.", StringComparison.OrdinalIgnoreCase);
 
+        // Prefer configured candidate URLs first (explicit API hosts), then fall back to the app origin.
         foreach (var candidateUrl in candidateUrls)
         {
             if (string.IsNullOrWhiteSpace(candidateUrl))
@@ -313,6 +308,11 @@ public sealed class EventTimingApiClient(IConfiguration configuration, Navigatio
             {
                 yield return parsedUri;
             }
+        }
+
+        if (seen.Add(appBaseUri.AbsoluteUri))
+        {
+            yield return appBaseUri;
         }
     }
 }
