@@ -169,6 +169,16 @@ select {
     padding: 0.85rem 0.95rem;
 }
 
+/* Wider filter textbox on Riders page */
+.filter-label {
+    display: block;
+}
+
+.filter-label .wide-input {
+    width: 100%;
+    max-width: none;
+}
+
 .action-row {
     display: flex;
     gap: 0.75rem;

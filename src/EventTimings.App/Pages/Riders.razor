@@ -60,9 +60,9 @@
 <section class="panel">
     <h2>Rider list</h2>
 
-    <label>
+    <label class="filter-label">
         <span>Filter riders</span>
-        <input @bind="riderFilter" placeholder="Type name, bib, email, or phone" />
+        <input class="wide-input" @bind="riderFilter" placeholder="Type name, bib, email, or phone" />
     </label>
 
     @if (riders.Count == 0)
