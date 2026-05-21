@@ -1,0 +1,281 @@
+@inject EventTimingApiClient ApiClient
+@inject IJSRuntime jsRuntime
+@using EventTimings.Contracts
+
+<section class="panel">
+    <h2>Import riders or contacts from file or paste</h2>
+    <p class="muted">Select a CSV or paste delimited text. Supported formats:
+        <ul>
+            <li>Riders: BibNumber, FullName, Category, AssignedRoute (optional)</li>
+            <li>Contacts: Email, Name, PhoneNumber</li>
+        </ul>
+    </p>
+
+    <div class="form-grid">
+        <label style="width:100%;">
+            <span>Select file</span>
+            <div style="display:flex; gap:8px; align-items:center;">
+                <InputFile OnChange="HandleFileSelected" accept=".csv,.txt" style="flex:1;" />
+            </div>
+        </label>
+    </div>
+
+    <label style="width:100%; display:block;">
+        <span>Or paste</span>
+        <textarea @bind="pasteText" style="width:100%;min-height:260px;resize:vertical;"></textarea>
+    </label>
+
+    <div class="action-row" style="gap:8px; margin-top:8px; display:flex; align-items:center;">
+        <button id="parseBtn" type="button" class="@(isParseDisabled ? "secondary-action disabled" : "secondary-action")" @onclick="SafeParsePreview" aria-disabled="@isParseDisabled">Parse</button>
+        <span class="muted" style="margin-left:8px; font-size:0.9em;">@((isParseDisabled) ? $"disabled (isBusy={isBusy}, pasteLength={pasteText?.Length ?? 0})" : "enabled")</span>
+
+        <button id="importBtn" type="button" style="margin-left:24px;" class="@(isImportDisabled ? "primary-action disabled" : "primary-action")" @onclick="ImportAsync" aria-disabled="@isImportDisabled">Import</button>
+        <span class="muted" style="margin-left:8px; font-size:0.9em;">@((isImportDisabled) ? $"disabled (isBusy={isBusy}, contactsToImport={parsedContactsToImport.Count}, ridersToImport={parsedDtosToImport.Count})" : "enabled")</span>
+    </div>
+    @if (!string.IsNullOrWhiteSpace(parseStatus))
+    {
+        <p class="muted">@parseStatus</p>
+    }
+
+    @if (parseErrors?.Count > 0)
+    {
+        <div class="muted">
+            <p>Parse issues:</p>
+            <ul>
+                @foreach(var err in parseErrors.Take(10))
+                {
+                    <li>@err</li>
+                }
+            </ul>
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(importStatus))
+    {
+        <div class="muted">
+            <p>@importStatus</p>
+            @if (importErrors?.Count > 0)
+            {
+                <p>Import errors:</p>
+                <ul>
+                    @foreach (var ie in importErrors.Take(10))
+                    {
+                        <li>@ie</li>
+                    }
+                </ul>
+            }
+        </div>
+    }
+
+    @if (parsedContacts.Count > 0)
+    {
+        <h3>Contact Preview (@parsedContacts.Count)</h3>
+        <div class="timing-list">
+            @foreach (var c in parsedContacts.Take(20))
+            {
+                <article class="timing-row">
+                    <div>
+                        <strong>@c.Email · @c.FullName</strong>
+                        <div class="muted">@c.Phone</div>
+                    </div>
+                </article>
+            }
+        </div>
+    }
+    else if (parsedDtos.Count > 0)
+    {
+        <h3>Preview (@parsedDtos.Count)</h3>
+        <div class="timing-list">
+            @foreach (var dto in parsedDtos.Take(20))
+            {
+                <article class="timing-row">
+                    <div>
+                        <strong>@dto.BibNumber · @dto.FullName</strong>
+                        <div class="muted">@dto.Category@(dto.AssignedRoute is not null ? $" · {dto.AssignedRoute}" : string.Empty)</div>
+                    </div>
+                </article>
+            }
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter] public EventCallback<ImportResults?> OnImported { get; set; }
+    [Parameter] public List<RiderManagementDto>? ExistingRiders { get; set; }
+
+    private string pasteText = string.Empty;
+    private List<RiderImportDto> parsedDtos = new();
+    private List<RiderImportDto> parsedDtosToImport = new();
+    private List<RiderImportDto> parsedDtosSkipped = new();
+
+    private List<RiderContactImportDto> parsedContacts = new();
+    private List<RiderContactImportDto> parsedContactsToImport = new();
+    private List<RiderContactImportDto> parsedContactsSkipped = new();
+
+    private List<string> parseErrors = new();
+    private bool isBusy;
+    private string? parseStatus;
+    private string? importStatus;
+    private List<string>? importErrors;
+
+    // Computed helpers for debug / accessibility testing
+    private bool isParseDisabled => isBusy || string.IsNullOrWhiteSpace(pasteText);
+    private bool isImportDisabled => isBusy || (parsedDtosToImport.Count == 0 && parsedContactsToImport.Count == 0);
+
+    private async Task HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        var files = e.GetMultipleFiles();
+        if (files == null || files.Count == 0) return;
+        var file = files[0];
+        try
+        {
+            using var stream = file.OpenReadStream(10 * 1024 * 1024); // 10 MB
+            using var reader = new StreamReader(stream);
+            pasteText = await reader.ReadToEndAsync();
+            ParsePreview();
+        }
+        catch
+        {
+            parseErrors = new List<string> { "Unable to read file." };
+        }
+    }
+
+    private void ParsePreview()
+    {
+        parseErrors.Clear();
+        parsedDtos.Clear();
+        parsedContacts.Clear();
+        var (riders, contacts, errors) = CsvParser.ParseImportContent(pasteText ?? string.Empty);
+        parsedDtos = riders;
+        parsedContacts = contacts;
+        parseErrors = errors;
+
+        // Determine which parsed rows are new vs already present
+        parsedContactsToImport.Clear();
+        parsedContactsSkipped.Clear();
+        parsedDtosToImport.Clear();
+        parsedDtosSkipped.Clear();
+
+        if (ExistingRiders is { Count: > 0 })
+        {
+            foreach (var c in parsedContacts)
+            {
+                var emailMatch = !string.IsNullOrWhiteSpace(c.Email) && ExistingRiders.Any(r => !string.IsNullOrWhiteSpace(r.Email) && string.Equals(r.Email.Trim(), c.Email.Trim(), StringComparison.OrdinalIgnoreCase));
+                var nameMatch = !string.IsNullOrWhiteSpace(c.FullName) && ExistingRiders.Any(r => !string.IsNullOrWhiteSpace(r.FullName) && string.Equals(r.FullName.Trim(), c.FullName.Trim(), StringComparison.OrdinalIgnoreCase));
+                if (emailMatch || nameMatch)
+                {
+                    parsedContactsSkipped.Add(c);
+                }
+                else
+                {
+                    parsedContactsToImport.Add(c);
+                }
+            }
+
+            foreach (var d in parsedDtos)
+            {
+                var bibMatch = ExistingRiders.Any(r => !string.IsNullOrWhiteSpace(r.BibNumber) && string.Equals(r.BibNumber.Trim(), d.BibNumber.Trim(), StringComparison.OrdinalIgnoreCase));
+                var nameMatch = !string.IsNullOrWhiteSpace(d.FullName) && ExistingRiders.Any(r => !string.IsNullOrWhiteSpace(r.FullName) && string.Equals(r.FullName.Trim(), d.FullName.Trim(), StringComparison.OrdinalIgnoreCase));
+                if (bibMatch || nameMatch)
+                {
+                    parsedDtosSkipped.Add(d);
+                }
+                else
+                {
+                    parsedDtosToImport.Add(d);
+                }
+            }
+        }
+        else
+        {
+            parsedContactsToImport = parsedContacts.ToList();
+            parsedDtosToImport = parsedDtos.ToList();
+        }
+
+        if (parsedContacts.Count > 0)
+        {
+            parseStatus = $"Parsed {parsedContacts.Count} contacts ({parsedContactsToImport.Count} new, {parsedContactsSkipped.Count} skipped).";
+        }
+        else if (parsedDtos.Count > 0)
+        {
+            parseStatus = $"Parsed {parsedDtos.Count} riders ({parsedDtosToImport.Count} new, {parsedDtosSkipped.Count} skipped).";
+        }
+        else if (parseErrors.Count > 0)
+        {
+            parseStatus = $"Parse completed with {parseErrors.Count} issue(s).";
+        }
+        else
+        {
+            parseStatus = "No rows parsed.";
+        }
+    }
+
+    private void SafeParsePreview()
+    {
+        if (isParseDisabled)
+        {
+            return;
+        }
+        try
+        {
+            ParsePreview();
+        }
+        catch (Exception ex)
+        {
+            parseErrors = new List<string> { "Parse failed: " + ex.Message };
+            parseStatus = "Parse failed.";
+        }
+    }
+
+    private async Task ImportAsync()
+    {
+        if (isImportDisabled)
+        {
+            return;
+        }
+        isBusy = true;
+        try
+        {
+            importStatus = "Importing...";
+            importErrors = null;
+
+            ImportResults? result = null;
+            if (parsedContactsToImport.Count > 0)
+            {
+                result = await ApiClient.ImportRiderContactsAsync(parsedContactsToImport);
+            }
+            else if (parsedDtosToImport.Count > 0)
+            {
+                result = await ApiClient.ImportParticipantsAsync(parsedDtosToImport);
+            }
+
+            if (result is not null)
+            {
+                importStatus = $"Import complete: {result.SuccessCount} added, {result.SkippedCount} skipped.";
+                importErrors = result.Errors?.ToList() ?? new List<string>();
+            }
+            else
+            {
+                importStatus = "Import failed. Check the API and try again.";
+            }
+
+            if (OnImported.HasDelegate)
+            {
+                await OnImported.InvokeAsync(result);
+            }
+        }
+        catch (Exception ex)
+        {
+            importStatus = "Import failed. Check the API and try again.";
+            importErrors = new List<string> { ex.Message };
+            if (OnImported.HasDelegate)
+            {
+                await OnImported.InvokeAsync(null);
+            }
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+}

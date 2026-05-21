@@ -74,6 +74,21 @@ app.Use(async (context, next) =>
     }
     catch { }
 
+    // Development-only: log raw body for import-contacts to help debugging
+    try
+    {
+        if (context.Request.Path.Equals("/api/admin/riders/import-contacts", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(context.Request.Method, "POST", StringComparison.OrdinalIgnoreCase))
+        {
+            context.Request.EnableBuffering();
+            using var reader = new StreamReader(context.Request.Body, Encoding.UTF8, leaveOpen: true);
+            var raw = await reader.ReadToEndAsync();
+            context.Request.Body.Position = 0;
+            try { Console.WriteLine("[RAW BODY] " + raw); } catch { }
+        }
+    }
+    catch { }
+
     await next();
 
     try
@@ -208,9 +223,31 @@ app.MapDelete("/api/admin/riders/{riderId}", (string riderId, TimingStore store)
 })
     .WithName("DeleteRider");
 
-app.MapPost("/api/admin/riders/import-contacts", (IEnumerable<RiderContactImportDto> contacts, TimingStore store) =>
-    Results.Ok(store.ImportRiderContacts(contacts)))
-    .WithName("ImportRiderContacts");
+    app.MapPost("/api/admin/riders/import-contacts", async (HttpRequest req, TimingStore store) =>
+    {
+        // Read raw body and deserialize manually to avoid model-binding surprises
+        using var reader = new StreamReader(req.Body, Encoding.UTF8);
+        var raw = await reader.ReadToEndAsync();
+        Console.WriteLine("[ImportEndpoint RAW] " + raw);
+
+        List<RiderContactImportDto>? contacts = null;
+        try
+        {
+            contacts = System.Text.Json.JsonSerializer.Deserialize<List<RiderContactImportDto>>(raw, new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("[ImportEndpoint JSON ERROR] " + ex);
+        }
+
+        contacts ??= new List<RiderContactImportDto>();
+
+        var result = store.ImportRiderContacts(contacts);
+        return Results.Ok(result);
+    }).WithName("ImportRiderContacts");
 
 app.MapPost("/api/admin/riders/seed-contacts", (TimingStore store) =>
     Results.Ok(store.ImportRiderContacts(RiderContactsData.Contacts)))

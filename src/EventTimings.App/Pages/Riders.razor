@@ -55,18 +55,7 @@
         <p class="muted">@statusMessage</p>
     }
 </section>
-
-<section class="panel">
-    <h2>One-time contact import</h2>
-    <p class="muted">Import the pre-loaded contact list. Riders already in the system (matched by name) are skipped. Bib numbers and categories should be updated after import.</p>
-    <div class="action-row">
-        <button class="secondary-action" type="button" @onclick="SeedContactsAsync" disabled="@isBusy">Import Contacts</button>
-    </div>
-    @if (!string.IsNullOrWhiteSpace(importMessage))
-    {
-        <p class="muted">@importMessage</p>
-    }
-</section>
+ 
 
 <section class="panel">
     <h2>Rider list</h2>
@@ -106,6 +95,20 @@
                 </article>
             }
         </div>
+    }
+</section>
+
+<ImportParticipants OnImported="HandleImported" ExistingRiders="riders" />
+
+<section class="panel">
+    <h2>One-time contact import</h2>
+    <p class="muted">Import the pre-loaded contact list. Riders already in the system (matched by name) are skipped. Bib numbers and categories should be updated after import.</p>
+    <div class="action-row">
+        <button class="secondary-action" type="button" @onclick="SeedContactsAsync" disabled="@isBusy">Import Contacts</button>
+    </div>
+    @if (!string.IsNullOrWhiteSpace(importMessage))
+    {
+        <p class="muted">@importMessage</p>
     }
 </section>
 
@@ -172,6 +175,19 @@
             isBusy = false;
         }
     }
+
+        private async Task HandleImported(ImportResults? result)
+        {
+            if (result is null)
+            {
+                importMessage = "Import failed. Check the API and try again.";
+            }
+            else
+            {
+                importMessage = $"Import complete: {result.SuccessCount} added, {result.SkippedCount} skipped.";
+                await LoadAsync();
+            }
+        }
 
     private void Edit(RiderManagementDto rider)
     {

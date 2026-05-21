@@ -108,6 +108,14 @@ public sealed class EventTimingApiClient(IConfiguration configuration, Navigatio
             return await response.Content.ReadFromJsonAsync<ImportResults>(cancellationToken);
         }, cancellationToken);
 
+    public Task<ImportResults?> ImportRiderContactsAsync(IEnumerable<RiderContactImportDto> contacts, CancellationToken cancellationToken = default) =>
+        SendWithFallbackAsync(async client =>
+        {
+            using var response = await client.PostAsJsonAsync("api/admin/riders/import-contacts", contacts, cancellationToken);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<ImportResults>(cancellationToken);
+        }, cancellationToken);
+
     public Task<IReadOnlyList<RouteTypeDto>?> GetRouteTypesAsync(CancellationToken cancellationToken = default) =>
         SendWithFallbackAsync(client => client.GetFromJsonAsync<IReadOnlyList<RouteTypeDto>>("api/admin/route-types", cancellationToken), cancellationToken);
 

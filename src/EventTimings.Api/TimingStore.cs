@@ -940,6 +940,15 @@ internal sealed class TimingStore
         {
             using var dbContext = dbContextFactory.CreateDbContext();
 
+            // Materialize the incoming sequence so we can log and iterate safely
+            var contactList = contacts?.ToList() ?? new List<RiderContactImportDto>();
+            Console.WriteLine($"[ImportRiderContacts] Received {contactList.Count} contacts");
+            for (var i = 0; i < contactList.Count; i++)
+            {
+                var c = contactList[i];
+                Console.WriteLine($"[ImportRiderContacts] Payload[{i}] FullName='{c.FullName}', Email='{c.Email}', Phone='{c.Phone}'");
+            }
+
             var errors = new List<string>();
             var successCount = 0;
             var skippedCount = 0;
@@ -951,12 +960,13 @@ internal sealed class TimingStore
                     .Max()
                 : 0) + 1;
 
-            foreach (var contact in contacts)
+            foreach (var contact in contactList)
             {
                 if (string.IsNullOrWhiteSpace(contact.FullName))
                 {
                     errors.Add("Skipped entry with empty name.");
                     skippedCount++;
+                    Console.WriteLine("[ImportRiderContacts] Skipped: empty name");
                     continue;
                 }
 
@@ -965,6 +975,7 @@ internal sealed class TimingStore
                 {
                     errors.Add($"Skipped '{normalizedName}': rider with this name already exists.");
                     skippedCount++;
+                    Console.WriteLine($"[ImportRiderContacts] Skipped: '{normalizedName}' already exists");
                     continue;
                 }
 
@@ -979,6 +990,7 @@ internal sealed class TimingStore
                     UpdatedAt = DateTimeOffset.UtcNow
                 });
 
+                Console.WriteLine($"[ImportRiderContacts] Added: '{normalizedName}' as Bib {nextBib:D3}");
                 nextBib++;
                 successCount++;
             }
@@ -987,8 +999,10 @@ internal sealed class TimingStore
             {
                 dbContext.SaveChanges();
                 UpdateAuditTrail("Contact import");
+                Console.WriteLine($"[ImportRiderContacts] Saved {successCount} new riders, {skippedCount} skipped");
             }
 
+            Console.WriteLine($"[ImportRiderContacts] Returning results: success={successCount}, skipped={skippedCount}, errors={errors.Count}");
             return new ImportResults(successCount, skippedCount, errors);
         }
     }
