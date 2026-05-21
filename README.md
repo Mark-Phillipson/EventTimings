@@ -52,7 +52,8 @@ dotnet run --project src/EventTimings.App/EventTimings.App.csproj
 - Add deployment configuration for Azure hosting
 
 ```powershell
- azd auth logout
- azd auth login --tenant-id 8cdf6afa-0a88-41ae-bf36-b23e42f1f035
- azd deploy --all
+dotnet publish src/EventTimings.Api/EventTimings.Api.csproj -c Release -o publish_output/EventTimings.Api
+dotnet publish src/EventTimings.App/EventTimings.App.csproj -c Release -o publish_output/EventTimings.App
+azd config show --output json
+azd up --output json
 ```
