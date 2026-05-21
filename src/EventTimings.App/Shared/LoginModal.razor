@@ -13,6 +13,8 @@
     private bool isBusy;
     private bool officialsLoading = true;
     private bool officialsLoadFailed = false;
+    private Microsoft.AspNetCore.Components.ElementReference officialSelectRef;
+    private bool hasFocusedOfficial = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -93,6 +95,32 @@
 
     private void OnCredentialChanged() => InvokeAsync(StateHasChanged);
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await base.OnAfterRenderAsync(firstRender);
+
+        if (!hasFocusedOfficial && !credentialState.IsAuthenticated && !officialsLoading && officials?.Count > 0 && !isBusy)
+        {
+            hasFocusedOfficial = true;
+            try
+            {
+                await officialSelectRef.FocusAsync();
+            }
+            catch
+            {
+                try
+                {
+                    // fallback to JS focus if ElementReference.FocusAsync() fails
+                    await jsRuntime.InvokeVoidAsync("eval", "document.getElementById('official-select')?.focus()");
+                }
+                catch
+                {
+                    // ignore any JS interop failure
+                }
+            }
+        }
+    }
+
     public void Dispose()
     {
         credentialState.OnChange -= OnCredentialChanged;
@@ -123,7 +151,7 @@
                     <div class="form-grid">
                         <label>
                             <span>Name</span>
-                            <select @bind="selectedOfficial" disabled="@isBusy">
+                            <select @bind="selectedOfficial" disabled="@isBusy" @ref="officialSelectRef" id="official-select">
                                 <option value="">Select official</option>
                                 @foreach (var o in officials)
                                 {
