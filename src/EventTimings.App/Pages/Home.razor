@@ -1,6 +1,7 @@
 @page "/"
 @inject EventTimingApiClient ApiClient
 @inject EventTimings.App.Services.CredentialState credentialState
+@inject Microsoft.JSInterop.IJSRuntime jsRuntime
 @implements IDisposable
 @using EventTimings.Contracts
 
@@ -41,7 +42,7 @@ else
 			<h2>Rider timing</h2>
 			<label>
 				<span>Search rider</span>
-				<input value="@riderSearchText" @oninput="OnRiderSearchInput" placeholder="Type a bib number, name, or category" />
+				<input id="rider-search" @ref="riderSearchRef" value="@riderSearchText" @oninput="OnRiderSearchInput" placeholder="Type a bib number, name, or category" />
 			</label>
 			<label>
 				<span>Select rider to time</span>
@@ -154,6 +155,8 @@ else
 	private string? statusMessage;
 	private bool apiReachable = true;
 	private TimingAction activeAction = TimingAction.None;
+	private Microsoft.AspNetCore.Components.ElementReference riderSearchRef;
+	private bool shouldFocusRiderSearch = false;
 
 	protected override async Task OnInitializedAsync()
 	{
@@ -257,6 +260,33 @@ else
 		finally
 		{
 			activeAction = TimingAction.None;
+			// Clear the search and request focus so the next bib can be typed immediately
+			riderSearchText = string.Empty;
+			shouldFocusRiderSearch = true;
+			StateHasChanged();
+		}
+	}
+
+	protected override async Task OnAfterRenderAsync(bool firstRender)
+	{
+		if (shouldFocusRiderSearch)
+		{
+			shouldFocusRiderSearch = false;
+			try
+			{
+				await riderSearchRef.FocusAsync();
+			}
+			catch
+			{
+				try
+				{
+					await jsRuntime.InvokeVoidAsync("eval", "document.getElementById('rider-search')?.focus()");
+				}
+				catch
+				{
+					// ignore failures to focus
+				}
+			}
 		}
 	}
 
@@ -299,6 +329,10 @@ else
 		finally
 		{
 			activeAction = TimingAction.None;
+			// Clear the search and request focus so the next bib can be typed immediately
+			riderSearchText = string.Empty;
+			shouldFocusRiderSearch = true;
+			StateHasChanged();
 		}
 	}
 
@@ -494,7 +528,7 @@ else
 		return new EventSnapshot(
 			"marden-2026",
 			"SFA Sportive 2026",
-			"Marden Railway Station, TN12 9DR",
+			"Memorial Hall, Goudhurst Rd, Marden, TN12 9JX",
 			new DateOnly(2026, 5, 24),
 			"Offline preview",
 			riders,

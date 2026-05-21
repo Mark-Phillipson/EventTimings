@@ -1091,7 +1091,7 @@ internal sealed class TimingStore
         return new EventSnapshot(
             EventCode,
             "SFA Sportive 2026",
-            "Marden Railway Station, TN12 9DR",
+            "Memorial Hall, Goudhurst Rd, Marden, TN12 9JX",
             new DateOnly(2026, 5, 24),
             status,
             riders,
