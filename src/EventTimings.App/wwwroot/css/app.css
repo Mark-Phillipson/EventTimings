@@ -380,6 +380,42 @@ select {
         content: var(--blazor-load-percentage-text, "Loading");
     }
 
+/* Wave rider list styling */
+.wave-rider-list {
+    list-style: disc;
+    margin: 0.35rem 0 0 1.05rem;
+    padding: 0;
+}
+
+.wave-rider-list li {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 0.35rem 0;
+    font-size: 0.95rem;
+}
+
+.wave-rider-list li span {
+    flex: 1 1 auto;
+}
+
+.remove-button {
+    background: rgba(220, 38, 38, 0.12);
+    color: #ffdede;
+    border: 1px solid rgba(220, 38, 38, 0.25);
+    padding: 0.2rem 0.5rem;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 0.78rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.remove-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 code {
     color: #c02d76;
 }

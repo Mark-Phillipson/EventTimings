@@ -66,6 +66,14 @@ public sealed class EventTimingApiClient(IConfiguration configuration, Navigatio
             return await response.Content.ReadFromJsonAsync<WaveDto>(cancellationToken);
         }, cancellationToken);
 
+    public Task<WaveDto?> RemoveRiderFromWaveAsync(string waveId, string riderId, CancellationToken cancellationToken = default) =>
+        SendWithFallbackAsync(async client =>
+        {
+            using var response = await client.DeleteAsync($"api/event/waves/{waveId}/riders/{riderId}", cancellationToken);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<WaveDto>(cancellationToken);
+        }, cancellationToken);
+
     public Task<WaveStartResult?> StartWaveAsync(string waveId, CancellationToken cancellationToken = default) =>
         SendWithFallbackAsync(async client =>
         {

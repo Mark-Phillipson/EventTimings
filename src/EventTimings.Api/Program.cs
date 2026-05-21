@@ -175,6 +175,13 @@ app.MapPut("/api/event/waves/{waveId}/riders", (string waveId, WaveAssignRiderRe
 })
     .WithName("AssignRiderToWave");
 
+app.MapDelete("/api/event/waves/{waveId}/riders/{riderId}", (string waveId, string riderId, TimingStore store) =>
+{
+    var (wave, error) = store.RemoveRiderFromWave(waveId, riderId);
+    return error is null ? Results.Ok(wave) : Results.NotFound(new { error });
+})
+    .WithName("RemoveRiderFromWave");
+
 app.MapPost("/api/event/waves/{waveId}/start", (string waveId, TimingStore store) =>
 {
     var (result, error) = store.StartWave(waveId);

@@ -30,11 +30,15 @@
 						@wave.RiderIds.Count rider(s)
 						@if (wave.RiderIds.Count > 0 && AllRiders is not null)
 						{
-							<span>
-								:
-								@string.Join(", ", wave.RiderIds
-									.Select(id => AllRiders.FirstOrDefault(r => r.RiderId == id)?.FullName ?? id))
-							</span>
+							<ul class="wave-rider-list">
+								@foreach (var id in wave.RiderIds)
+								{
+									<li>
+										<span>@(AllRiders.FirstOrDefault(r => r.RiderId == id)?.FullName ?? id)</span>
+										<button class="remove-button" type="button" disabled="@isBusy" @onclick="() => RemoveRiderAsync(wave.WaveId, id)">Remove</button>
+									</li>
+								}
+							</ul>
 						}
 					</div>
 				</div>
@@ -103,17 +107,17 @@
 	}
 
 	private IEnumerable<RiderSummary> UnassignedRiders(WaveDto wave) =>
-		AllRiders?.Where(r => !wave.RiderIds.Contains(r.RiderId)) ?? [];
+		AllRiders is null ? Array.Empty<RiderSummary>() : AllRiders.Where(r => !wave.RiderIds.Contains(r.RiderId)).OrderBy(r => r.FullName);
 
 	private string GetRiderFilter(string waveId) =>
 		riderFilterTexts.TryGetValue(waveId, out var t) ? t : string.Empty;
 
 	private IEnumerable<RiderSummary> UnassignedRiders(WaveDto wave, string filter) =>
-		AllRiders?.Where(r =>
+		AllRiders is null ? Array.Empty<RiderSummary>() : AllRiders.Where(r =>
 			!wave.RiderIds.Contains(r.RiderId) &&
 			(string.IsNullOrWhiteSpace(filter) ||
 			 r.FullName.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
-			 r.BibNumber.Contains(filter, StringComparison.OrdinalIgnoreCase))) ?? [];
+			 r.BibNumber.Contains(filter, StringComparison.OrdinalIgnoreCase))).OrderBy(r => r.FullName);
 
 	private async Task CreateWaveAsync()
 	{
@@ -169,6 +173,37 @@
 		catch
 		{
 			waveMessage = "Failed to assign rider. Please check the API is reachable.";
+		}
+		finally
+		{
+			isBusy = false;
+		}
+	}
+
+	private async Task RemoveRiderAsync(string waveId, string riderId)
+	{
+		if (string.IsNullOrWhiteSpace(riderId))
+		{
+			return;
+		}
+
+		isBusy = true;
+		waveMessage = null;
+		try
+		{
+			var wave = await ApiClient.RemoveRiderFromWaveAsync(waveId, riderId);
+			if (wave is not null)
+			{
+				var index = waves.FindIndex(w => w.WaveId == waveId);
+				if (index >= 0)
+				{
+					waves[index] = wave;
+				}
+			}
+		}
+		catch
+		{
+			waveMessage = "Failed to remove rider. Please check the API is reachable.";
 		}
 		finally
 		{

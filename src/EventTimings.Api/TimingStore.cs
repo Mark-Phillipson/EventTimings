@@ -333,6 +333,39 @@ internal sealed class TimingStore
         }
     }
 
+    public (WaveDto? Wave, string? Error) RemoveRiderFromWave(string waveId, string riderId)
+    {
+        lock (syncRoot)
+        {
+            if (!waveNames.TryGetValue(waveId, out var waveName))
+            {
+                return (null, "Wave not found.");
+            }
+
+            using var dbContext = dbContextFactory.CreateDbContext();
+            var riderExists = dbContext.Riders.Any(item => item.RiderId == riderId);
+            if (!riderExists)
+            {
+                return (null, "Rider not found.");
+            }
+
+            // Prevent removal once the wave has been started (timing sessions created)
+            var hasWaveTiming = timingSessions.Any(session => session.RiderId == riderId && session.OfficialName == $"Wave: {waveName}");
+            if (hasWaveTiming)
+            {
+                return (null, "Cannot remove rider after the wave has been started.");
+            }
+
+            var riderList = waveRiders[waveId];
+            if (riderList.Contains(riderId))
+            {
+                riderList.RemoveAll(item => item == riderId);
+            }
+
+            return (new WaveDto(waveId, waveName, riderList.AsReadOnly()), null);
+        }
+    }
+
     public (WaveStartResult? Result, string? Error) StartWave(string waveId)
     {
         lock (syncRoot)
