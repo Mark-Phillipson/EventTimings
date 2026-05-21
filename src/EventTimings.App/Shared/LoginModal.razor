@@ -68,7 +68,7 @@
         try
         {
             try { await jsRuntime.InvokeVoidAsync("console.log", "LoginModal.VerifyAsync:start", selectedOfficial, pin); } catch { }
-            var req = new OfficialVerificationRequest(selectedOfficial, pin);
+            var req = new OfficialVerificationRequest(selectedOfficial, pin!);
             var result = await ApiClient.VerifyOfficialAsync(req);
             try { await jsRuntime.InvokeVoidAsync("console.log", "LoginModal.VerifyAsync:result", result?.Success ?? false, result?.Message ?? string.Empty); } catch { }
             if (result is not null && result.Success && result.Official is not null)

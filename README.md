@@ -1,6 +1,6 @@
 # EventTimings
 
-EventTimings is a .NET Blazor WebAssembly app for timing a cycling event on phones or tablets, backed by an ASP.NET Core API and shared contracts. The current implementation is shaped around the SFA Sportive 2025 event and is intended to evolve into a cloud-hosted event timing tool with Azure SQL and offline-friendly client behavior.
+EventTimings is a .NET Blazor WebAssembly app for timing a cycling event on phones or tablets, backed by an ASP.NET Core API and shared contracts. The current implementation is shaped around the SFA Sportive 2026 event and is intended to evolve into a cloud-hosted event timing tool with Azure SQL and offline-friendly client behavior.
 
 ## Solution layout
 
