@@ -8,10 +8,10 @@ namespace EventTimings.Api;
 internal sealed class TimingStore
 {
     private const string EventCode = "marden-2026";
+    private const string ResetAuthorizedOfficialId = "official-001";
 
     private readonly IDbContextFactory<EventTimingsDbContext> dbContextFactory;
     private readonly object syncRoot = new();
-    private readonly List<TimingSessionDto> timingSessions = [];
     private readonly Dictionary<string, string> waveNames = [];
     private readonly Dictionary<string, List<string>> waveRiders = [];
     private string lastUpdatedBy = "System";
@@ -48,8 +48,10 @@ internal sealed class TimingStore
             var reportRows = riders
                 .Select(rider =>
                 {
-                    var riderSessions = timingSessions
+                    var riderSessions = dbContext.TimingSessions
+                        .AsNoTracking()
                         .Where(session => session.RiderId == rider.RiderId)
+                        .ToArray()
                         .OrderByDescending(session => session.StartedAt)
                         .ToArray();
 
@@ -97,21 +99,27 @@ internal sealed class TimingStore
             }
 
             var rider = dbContext.Riders.First(riderItem => riderItem.RiderId == request.RiderId);
-            var existingSession = timingSessions.LastOrDefault(session => session.RiderId == rider.RiderId && session.StoppedAt is null);
+            var existingSession = dbContext.TimingSessions
+                .AsNoTracking()
+                .Where(session => session.RiderId == rider.RiderId && session.StoppedAt == null)
+                .FirstOrDefault();
             if (existingSession is not null)
             {
                 return new TimingCommandResult(false, $"{rider.FullName} is already running.", CreateSnapshot(dbContext));
             }
 
-            var session = new TimingSessionDto(
-                Guid.NewGuid().ToString("N"),
-                rider.RiderId,
-                rider.FullName,
-                request.OfficialName,
-                DateTimeOffset.UtcNow,
-                null);
+            var session = new TimingSessionEntity
+            {
+                SessionId = Guid.NewGuid().ToString("N"),
+                RiderId = rider.RiderId,
+                RiderName = rider.FullName,
+                OfficialName = request.OfficialName,
+                StartedAt = DateTimeOffset.UtcNow,
+                StoppedAt = null
+            };
 
-            timingSessions.Add(session);
+            dbContext.TimingSessions.Add(session);
+            dbContext.SaveChanges();
             UpdateAuditTrail(request.OfficialName);
 
             return new TimingCommandResult(true, $"Started timing for {rider.FullName}.", CreateSnapshot(dbContext));
@@ -131,14 +139,16 @@ internal sealed class TimingStore
             }
 
             var rider = dbContext.Riders.First(riderItem => riderItem.RiderId == request.RiderId);
-            var sessionIndex = timingSessions.FindLastIndex(session => session.RiderId == rider.RiderId && session.StoppedAt is null);
-            if (sessionIndex < 0)
+            var currentSession = dbContext.TimingSessions
+                .Where(session => session.RiderId == rider.RiderId && session.StoppedAt == null)
+                .FirstOrDefault();
+            if (currentSession is null)
             {
                 return new TimingCommandResult(false, $"No active timing session exists for {rider.FullName}.", CreateSnapshot(dbContext));
             }
 
-            var currentSession = timingSessions[sessionIndex];
-            timingSessions[sessionIndex] = currentSession with { StoppedAt = DateTimeOffset.UtcNow };
+            currentSession.StoppedAt = DateTimeOffset.UtcNow;
+            dbContext.SaveChanges();
             UpdateAuditTrail(request.OfficialName);
 
             return new TimingCommandResult(true, $"Stopped timing for {rider.FullName}.", CreateSnapshot(dbContext));
@@ -159,10 +169,16 @@ internal sealed class TimingStore
                 return new TimingCommandResult(false, verifyError ?? "The official name or PIN is not recognized.", CreateSnapshot(dbContext));
             }
 
-            var cleared = timingSessions.Count;
+            if (!string.Equals(official.OfficialId, ResetAuthorizedOfficialId, StringComparison.OrdinalIgnoreCase))
+            {
+                return new TimingCommandResult(false, "Only Mark Phillipson can reset timings.", CreateSnapshot(dbContext));
+            }
+
+            var cleared = dbContext.TimingSessions.Count();
             if (cleared > 0)
             {
-                timingSessions.Clear();
+                dbContext.TimingSessions.RemoveRange(dbContext.TimingSessions);
+                dbContext.SaveChanges();
                 UpdateAuditTrail(request.OfficialName);
             }
 
@@ -350,7 +366,9 @@ internal sealed class TimingStore
             }
 
             // Prevent removal once the wave has been started (timing sessions created)
-            var hasWaveTiming = timingSessions.Any(session => session.RiderId == riderId && session.OfficialName == $"Wave: {waveName}");
+            var hasWaveTiming = dbContext.TimingSessions
+                .AsNoTracking()
+                .Any(session => session.RiderId == riderId && session.OfficialName == $"Wave: {waveName}");
             if (hasWaveTiming)
             {
                 return (null, "Cannot remove rider after the wave has been started.");
@@ -390,25 +408,31 @@ internal sealed class TimingStore
                     continue;
                 }
 
-                var existingSession = timingSessions.LastOrDefault(session => session.RiderId == riderId && session.StoppedAt is null);
+                var existingSession = dbContext.TimingSessions
+                    .AsNoTracking()
+                    .Where(session => session.RiderId == riderId && session.StoppedAt == null)
+                    .FirstOrDefault();
                 if (existingSession is not null)
                 {
                     skipped.Add(rider.FullName);
                     continue;
                 }
 
-                timingSessions.Add(new TimingSessionDto(
-                    Guid.NewGuid().ToString("N"),
-                    rider.RiderId,
-                    rider.FullName,
-                    $"Wave: {waveName}",
-                    startTime,
-                    null));
+                dbContext.TimingSessions.Add(new TimingSessionEntity
+                {
+                    SessionId = Guid.NewGuid().ToString("N"),
+                    RiderId = rider.RiderId,
+                    RiderName = rider.FullName,
+                    OfficialName = $"Wave: {waveName}",
+                    StartedAt = startTime,
+                    StoppedAt = null
+                });
                 startedCount++;
             }
 
             if (startedCount > 0)
             {
+                dbContext.SaveChanges();
                 UpdateAuditTrail($"Wave: {waveName}");
             }
 
@@ -545,7 +569,12 @@ internal sealed class TimingStore
                 riderList.RemoveAll(item => item == riderId);
             }
 
-            timingSessions.RemoveAll(session => session.RiderId == riderId);
+            var riderSessions = dbContext.TimingSessions.Where(session => session.RiderId == riderId).ToArray();
+            if (riderSessions.Length > 0)
+            {
+                dbContext.TimingSessions.RemoveRange(riderSessions);
+                dbContext.SaveChanges();
+            }
 
             UpdateAuditTrail("Rider management");
             return null;
@@ -816,6 +845,7 @@ internal sealed class TimingStore
             if (dbContext.Database.IsSqlite())
             {
                 dbContext.Database.EnsureCreated();
+                EnsureSqliteTimingSessionSchema(dbContext);
             }
             else
             {
@@ -866,6 +896,25 @@ internal sealed class TimingStore
 
             dbContext.SaveChanges();
         }
+    }
+
+    private static void EnsureSqliteTimingSessionSchema(EventTimingsDbContext dbContext)
+    {
+        dbContext.Database.ExecuteSqlRaw(
+            """
+            CREATE TABLE IF NOT EXISTS "TimingSessions" (
+                "SessionId" TEXT NOT NULL CONSTRAINT "PK_TimingSessions" PRIMARY KEY,
+                "RiderId" TEXT NOT NULL,
+                "RiderName" TEXT NOT NULL,
+                "OfficialName" TEXT NOT NULL,
+                "StartedAt" TEXT NOT NULL,
+                "StoppedAt" TEXT NULL,
+                CONSTRAINT "FK_TimingSessions_Riders_RiderId" FOREIGN KEY ("RiderId") REFERENCES "Riders" ("RiderId") ON DELETE CASCADE
+            );
+            """);
+
+        dbContext.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS \"IX_TimingSessions_StartedAt\" ON \"TimingSessions\" (\"StartedAt\");");
+        dbContext.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS \"IX_TimingSessions_RiderId_StoppedAt\" ON \"TimingSessions\" (\"RiderId\", \"StoppedAt\");");
     }
 
     private RouteTypeEntity? ResolveRouteType(EventTimingsDbContext dbContext, string? routeLabel)
@@ -1055,8 +1104,20 @@ internal sealed class TimingStore
     {
         lock (syncRoot)
         {
-            var orderedSessions = timingSessions
+            using var dbContext = dbContextFactory.CreateDbContext();
+
+            var orderedSessions = dbContext.TimingSessions
+                .AsNoTracking()
+                .Select(session => new TimingSessionDto(
+                    session.SessionId,
+                    session.RiderId,
+                    session.RiderName,
+                    session.OfficialName,
+                    session.StartedAt,
+                    session.StoppedAt))
+                .ToArray()
                 .OrderByDescending(session => session.StartedAt)
+                .ThenByDescending(session => session.SessionId)
                 .ToArray();
 
             var totalCount = orderedSessions.Length;
@@ -1071,6 +1132,20 @@ internal sealed class TimingStore
 
     private EventSnapshot CreateSnapshot(EventTimingsDbContext dbContext)
     {
+        var timingSessions = dbContext.TimingSessions
+            .AsNoTracking()
+            .Select(session => new TimingSessionDto(
+                session.SessionId,
+                session.RiderId,
+                session.RiderName,
+                session.OfficialName,
+                session.StartedAt,
+                session.StoppedAt))
+            .ToArray()
+            .OrderByDescending(session => session.StartedAt)
+            .ThenByDescending(session => session.SessionId)
+            .ToArray();
+
         var status = timingSessions.Any(session => session.StoppedAt is null) ? "Live" : "Ready";
 
         var riders = dbContext.Riders
@@ -1095,7 +1170,7 @@ internal sealed class TimingStore
             new DateOnly(2026, 5, 24),
             status,
             riders,
-            timingSessions.OrderByDescending(session => session.StartedAt).ToArray(),
+                timingSessions,
             lastUpdatedBy,
             lastUpdatedAt);
     }

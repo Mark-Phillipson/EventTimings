@@ -48,7 +48,7 @@ dotnet run --project src/EventTimings.App/EventTimings.App.csproj
 
 - Replace the in-memory store with Azure SQL Database
 - Add persistent synchronization for offline timing actions
-- Add an admin screen for event and rider setup
+- Add an admin screen foer event and rider setup
 - Add deployment configuration for Azure hosting
 
 ```powershell

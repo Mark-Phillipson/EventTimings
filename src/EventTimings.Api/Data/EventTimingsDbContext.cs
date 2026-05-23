@@ -10,6 +10,8 @@ public sealed class EventTimingsDbContext(DbContextOptions<EventTimingsDbContext
 
     public DbSet<OfficialEntity> Officials => Set<OfficialEntity>();
 
+    public DbSet<TimingSessionEntity> TimingSessions => Set<TimingSessionEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<RiderEntity>(entity =>
@@ -50,6 +52,24 @@ public sealed class EventTimingsDbContext(DbContextOptions<EventTimingsDbContext
             entity.Property(item => item.IsActive).IsRequired();
             entity.Property(item => item.UpdatedAt).IsRequired();
             entity.HasIndex(item => item.FullName).IsUnique();
+        });
+
+        modelBuilder.Entity<TimingSessionEntity>(entity =>
+        {
+            entity.HasKey(item => item.SessionId);
+            entity.Property(item => item.SessionId).HasMaxLength(64);
+            entity.Property(item => item.RiderId).HasMaxLength(64).IsRequired();
+            entity.Property(item => item.RiderName).HasMaxLength(256).IsRequired();
+            entity.Property(item => item.OfficialName).HasMaxLength(256).IsRequired();
+            entity.Property(item => item.StartedAt).IsRequired();
+            entity.Property(item => item.StoppedAt);
+            entity.HasIndex(item => item.StartedAt);
+            entity.HasIndex(item => new { item.RiderId, item.StoppedAt });
+
+            entity.HasOne(item => item.Rider)
+                .WithMany()
+                .HasForeignKey(item => item.RiderId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }
@@ -101,4 +121,21 @@ public sealed class OfficialEntity
     public bool IsActive { get; set; } = true;
 
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+public sealed class TimingSessionEntity
+{
+    public string SessionId { get; set; } = string.Empty;
+
+    public string RiderId { get; set; } = string.Empty;
+
+    public RiderEntity? Rider { get; set; }
+
+    public string RiderName { get; set; } = string.Empty;
+
+    public string OfficialName { get; set; } = string.Empty;
+
+    public DateTimeOffset StartedAt { get; set; }
+
+    public DateTimeOffset? StoppedAt { get; set; }
 }

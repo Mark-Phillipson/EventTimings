@@ -1,0 +1,1 @@
+- Timing sessions moved to EF Core persistence; avoid DateTimeOffset ORDER BY translation on SQLite by sorting in-memory after materialization.
