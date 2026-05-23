@@ -51,9 +51,19 @@ dotnet run --project src/EventTimings.App/EventTimings.App.csproj
 - Add an admin screen foer event and rider setup
 - Add deployment configuration for Azure hosting
 
+Publishing and Deploying:
+
 ```powershell
+
 dotnet publish src/EventTimings.Api/EventTimings.Api.csproj -c Release -o publish_output/EventTimings.Api
+
 dotnet publish src/EventTimings.App/EventTimings.App.csproj -c Release -o publish_output/EventTimings.App
+
 azd config show --output json
+
 azd up --output json
-```
+azd deploy api --output json
+
+Invoke-WebRequest -UseBasicParsing -SkipHttpErrorCheck https://azappb4o6ukmm7m7zi.azurewebsites.net/health/store | Select-Object StatusCode, Content | Format-List | Out-String
+
+``` 

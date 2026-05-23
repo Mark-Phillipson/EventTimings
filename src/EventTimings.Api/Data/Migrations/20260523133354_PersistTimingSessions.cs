@@ -15,12 +15,12 @@ namespace EventTimings.Api.Data.Migrations
                 name: "TimingSessions",
                 columns: table => new
                 {
-                    SessionId = table.Column<string>(maxLength: 64, nullable: false),
-                    RiderId = table.Column<string>(maxLength: 64, nullable: false),
-                    RiderName = table.Column<string>(maxLength: 256, nullable: false),
-                    OfficialName = table.Column<string>(maxLength: 256, nullable: false),
-                    StartedAt = table.Column<DateTimeOffset>(nullable: false),
-                    StoppedAt = table.Column<DateTimeOffset>(nullable: true)
+                    SessionId = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false),
+                    RiderId = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false),
+                    RiderName = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: false),
+                    OfficialName = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: false),
+                    StartedAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
+                    StoppedAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true)
                 },
                 constraints: table =>
                 {

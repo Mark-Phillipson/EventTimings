@@ -39,6 +39,7 @@ async function onActivate(event) {
 
 async function onFetch(event) {
     let cachedResponse = null;
+    let cache = null;
     if (event.request.method === 'GET') {
         const requestUrl = new URL(event.request.url);
         const isApiOrHealthRequest = requestUrl.origin === self.origin
@@ -52,9 +53,25 @@ async function onFetch(event) {
             && !manifestUrlList.some(url => url === event.request.url);
 
         const request = shouldServeIndexHtml ? 'index.html' : event.request;
-        const cache = await caches.open(cacheName);
+        cache = await caches.open(cacheName);
         cachedResponse = await cache.match(request);
     }
 
-    return cachedResponse || fetch(event.request);
+    if (cachedResponse) {
+        return cachedResponse;
+    }
+
+    try {
+        return await fetch(event.request);
+    } catch (error) {
+        if (event.request.method === 'GET' && event.request.mode === 'navigate' && cache === null) {
+            cache = await caches.open(cacheName);
+        }
+
+        if (event.request.method === 'GET' && event.request.mode === 'navigate') {
+            return (cache && await cache.match('index.html')) || Response.error();
+        }
+
+        throw error;
+    }
 }

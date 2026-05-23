@@ -1,6 +1,7 @@
 using EventTimings.Api;
 using EventTimings.Api.Data;
 using EventTimings.Contracts;
+using Microsoft.Data.Sqlite;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
@@ -24,7 +25,11 @@ builder.Services.AddCors(options =>
 });
 builder.Services.AddDbContextFactory<EventTimingsDbContext>(options =>
 {
-    var connectionString = builder.Configuration.GetConnectionString("EventTimingsDb");
+    var connectionString = builder.Configuration.GetConnectionString("EventTimingsDb")
+        ?? builder.Configuration["ConnectionStrings__EventTimingsDb"]
+        ?? builder.Configuration["SQLAZURECONNSTR_EventTimingsDb"]
+        ?? builder.Configuration["SQLCONNSTR_EventTimingsDb"]
+        ?? builder.Configuration["AZURE_SQL_CONNECTIONSTRING"];
     var configuredProvider = builder.Configuration["DatabaseProvider"];
     var useSqlServer = string.Equals(configuredProvider, "SqlServer", StringComparison.OrdinalIgnoreCase)
         || (!string.IsNullOrWhiteSpace(connectionString)
@@ -38,6 +43,27 @@ builder.Services.AddDbContextFactory<EventTimingsDbContext>(options =>
         {
             connectionString = "Data Source=eventtimings.db";
         }
+
+        var sqliteConnectionStringBuilder = new SqliteConnectionStringBuilder(connectionString);
+        if (string.IsNullOrWhiteSpace(sqliteConnectionStringBuilder.DataSource))
+        {
+            sqliteConnectionStringBuilder.DataSource = "eventtimings.db";
+        }
+
+        // In App Service, write the SQLite DB under HOME so it survives restarts and remains writable.
+        var isAppService = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("WEBSITE_SITE_NAME"));
+        if (isAppService && !Path.IsPathRooted(sqliteConnectionStringBuilder.DataSource))
+        {
+            var home = Environment.GetEnvironmentVariable("HOME");
+            if (!string.IsNullOrWhiteSpace(home))
+            {
+                var dataDirectory = Path.Combine(home, "data");
+                Directory.CreateDirectory(dataDirectory);
+                sqliteConnectionStringBuilder.DataSource = Path.Combine(dataDirectory, sqliteConnectionStringBuilder.DataSource);
+            }
+        }
+
+        connectionString = sqliteConnectionStringBuilder.ToString();
 
         options.UseSqlite(connectionString);
         return;
@@ -102,6 +128,23 @@ app.UseBlazorFrameworkFiles();
 app.UseStaticFiles();
 
 app.MapGet("/health", () => Results.Ok("healthy"));
+
+app.MapGet("/health/store", (IServiceProvider services) =>
+{
+    try
+    {
+        var store = services.GetRequiredService<TimingStore>();
+        _ = store.GetSnapshot();
+        return Results.Ok(new { status = "ok" });
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem(
+            title: "TimingStore initialization failed",
+            detail: $"{ex.GetType().Name}: {ex.Message}",
+            statusCode: StatusCodes.Status500InternalServerError);
+    }
+});
 
 app.MapGet("/api/event/current", (TimingStore store) => Results.Ok(store.GetSnapshot()))
     .WithName("GetCurrentEvent");
