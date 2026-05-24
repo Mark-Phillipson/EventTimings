@@ -208,6 +208,21 @@ select {
     color: #e2e8f0;
 }
 
+/* Small compact action buttons (used in tables) */
+.tiny-action {
+    /* override flex:1 to avoid stretching in table cells */
+    flex: 0 0 auto !important;
+    padding: 0.35rem 0.6rem !important;
+    font-weight: 700;
+    border-radius: 10px !important;
+    font-size: 0.85rem !important;
+    min-width: 44px;
+}
+
+.tiny-action + .tiny-action {
+    margin-left: 0.4rem;
+}
+
 .button-spinner {
     width: 1rem;
     height: 1rem;
@@ -272,6 +287,16 @@ select {
     border-top: 1px solid rgba(148, 163, 184, 0.2);
     white-space: nowrap;
 }
+
+/* Ensure action cells have room and don't clip their contents */
+.results-table th.actions-col,
+.results-table td.actions-col {
+    width: 140px;
+    text-align: right;
+    overflow: visible;
+}
+
+.results-table td { overflow: visible; }
 
 .results-table th {
     color: #cbd5e1;

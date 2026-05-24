@@ -78,6 +78,13 @@ public sealed record TimingCommandRequest(
 	string Pin,
 	string RiderId);
 
+public sealed record AdjustTimingRequest(
+	string EventCode,
+	string OfficialName,
+	string Pin,
+	string RiderId,
+	int DeltaMinutes);
+
 public sealed record TimingCommandResult(
 	bool Success,
 	string Message,

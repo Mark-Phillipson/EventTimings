@@ -9,17 +9,17 @@
 
     <div class="form-grid">
         <label>
-            <span>Bib number</span>
+            <span>Bib number <span style="color:#d00">*</span></span>
             <input @bind="bibNumber" />
         </label>
 
         <label>
-            <span>Full name</span>
+            <span>Full name <span style="color:#d00">*</span></span>
             <input @bind="fullName" />
         </label>
 
         <label>
-            <span>Category</span>
+            <span>Category <span style="color:#d00">*</span></span>
             <input @bind="category" />
         </label>
 
@@ -46,9 +46,14 @@
     </div>
 
     <div class="action-row">
-        <button class="primary-action" type="button" @onclick="SaveAsync" disabled="@isBusy">@(editingRiderId is null ? "Add Rider" : "Update Rider")</button>
+        <button class="primary-action" type="button" @onclick="SaveAsync" disabled="@(!IsFormValid || isBusy)" title="@(IsFormValid ? string.Empty : "Fill required fields: Bib number, Full name, Category")">@(editingRiderId is null ? "Add Rider" : "Update Rider")</button>
         <button class="secondary-action" type="button" @onclick="ResetForm">Clear</button>
     </div>
+
+    @if (!IsFormValid)
+    {
+        <p class="muted">Please fill the required fields marked <span style="color:#d00">*</span>.</p>
+    }
 
     @if (!string.IsNullOrWhiteSpace(statusMessage))
     {
@@ -127,6 +132,11 @@
     private string? statusMessage;
     private string? importMessage;
     private bool isBusy;
+
+    private bool IsFormValid =>
+        !string.IsNullOrWhiteSpace(bibNumber)
+        && !string.IsNullOrWhiteSpace(fullName)
+        && !string.IsNullOrWhiteSpace(category);
 
     private List<RiderManagementDto> filteredRiders => riders
         .Where(MatchesFilter)

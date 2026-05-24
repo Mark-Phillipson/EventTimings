@@ -155,6 +155,62 @@ internal sealed class TimingStore
         }
     }
 
+    public TimingCommandResult AdjustTiming(AdjustTimingRequest request)
+    {
+        // Verify official credentials first (uses its own DB context)
+        var (official, verifyError) = VerifyOfficial(new OfficialVerificationRequest(request.OfficialName, request.Pin));
+
+        lock (syncRoot)
+        {
+            using var dbContext = dbContextFactory.CreateDbContext();
+
+            if (official is null)
+            {
+                return new TimingCommandResult(false, verifyError ?? "The official name or PIN is not recognized.", CreateSnapshot(dbContext));
+            }
+
+            // Find the most recent completed session for the rider.
+            // Materialize a snapshot to avoid SQLite translating DateTimeOffset in ORDER BY,
+            // then re-load the session as a tracked entity so updates are persisted.
+            var completedSessionSnapshot = dbContext.TimingSessions
+                .Where(s => s.RiderId == request.RiderId && s.StoppedAt != null)
+                .AsNoTracking()
+                .ToArray()
+                .OrderByDescending(s => s.StartedAt)
+                .FirstOrDefault();
+
+            if (completedSessionSnapshot is null)
+            {
+                return new TimingCommandResult(false, "No finished timing session exists for this rider.", CreateSnapshot(dbContext));
+            }
+
+            // Load the same session as a tracked entity so changes will be saved.
+            var completedSession = dbContext.TimingSessions
+                .FirstOrDefault(s => s.SessionId == completedSessionSnapshot.SessionId);
+
+            if (completedSession is null)
+            {
+                // Shouldn't happen, but guard defensively.
+                return new TimingCommandResult(false, "No finished timing session exists for this rider.", CreateSnapshot(dbContext));
+            }
+
+            // Adjust stopped time by the requested minutes; clamp so it is not before the start time
+            var newStopped = completedSession.StoppedAt!.Value.AddMinutes(request.DeltaMinutes);
+            if (newStopped < completedSession.StartedAt)
+            {
+                newStopped = completedSession.StartedAt;
+            }
+
+            completedSession.StoppedAt = newStopped;
+            dbContext.SaveChanges();
+            UpdateAuditTrail(request.OfficialName);
+
+            var sign = request.DeltaMinutes >= 0 ? "+" : string.Empty;
+            var message = $"Adjusted finished time for {completedSession.RiderName} by {sign}{request.DeltaMinutes} minute(s).";
+            return new TimingCommandResult(true, message, CreateSnapshot(dbContext));
+        }
+    }
+
     public TimingCommandResult ResetAllTimings(TimingCommandRequest request)
     {
         // Verify official credentials first (uses its own DB context)

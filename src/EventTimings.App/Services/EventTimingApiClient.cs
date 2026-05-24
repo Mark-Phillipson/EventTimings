@@ -164,6 +164,22 @@ public sealed class EventTimingApiClient(IConfiguration configuration, Navigatio
     public Task<TimingCommandResult?> ResetTimingsAsync(TimingCommandRequest request, CancellationToken cancellationToken = default) =>
         PostTimingCommandAsync("api/admin/timings/reset", request, cancellationToken);
 
+    public Task<TimingCommandResult?> AdjustTimingAsync(AdjustTimingRequest request, CancellationToken cancellationToken = default) =>
+        SendWithFallbackAsync(async client =>
+        {
+            using var response = await client.PostAsJsonAsync("api/admin/timings/adjust", request, cancellationToken);
+
+            // Adjust endpoint returns a structured TimingCommandResult even on validation failures (400).
+            var result = await response.Content.ReadFromJsonAsync<TimingCommandResult>(cancellationToken);
+            if (result is not null)
+            {
+                return result;
+            }
+
+            response.EnsureSuccessStatusCode();
+            return null;
+        }, cancellationToken);
+
     public Task<OfficialDto?> CreateOfficialAsync(OfficialCreateRequest request, CancellationToken cancellationToken = default) =>
         SendWithFallbackAsync(async client =>
         {

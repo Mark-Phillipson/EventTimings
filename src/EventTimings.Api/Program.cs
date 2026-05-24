@@ -182,6 +182,14 @@ app.MapPost("/api/event/timing/stop", (TimingCommandRequest request, TimingStore
 })
     .WithName("StopTiming");
 
+// Admin: adjust a finished timing (requires official verification)
+app.MapPost("/api/admin/timings/adjust", (AdjustTimingRequest request, TimingStore store) =>
+{
+    var result = store.AdjustTiming(request);
+    return result.Success ? Results.Ok(result) : Results.BadRequest(result);
+})
+    .WithName("AdjustTiming");
+
 app.MapPost("/api/event/participants/import", (IEnumerable<RiderImportDto> participants, TimingStore store) =>
     Results.Ok(store.ImportParticipants(participants)))
     .WithName("ImportParticipants");

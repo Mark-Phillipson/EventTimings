@@ -47,6 +47,7 @@
                         <th>Finished</th>
                         <th>Elapsed</th>
                         <th>Status</th>
+                        <th class="actions-col">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -61,6 +62,30 @@
                             <td>@FormatDateTime(row.FinishedAt)</td>
                             <td>@FormatElapsed(row.ElapsedSeconds)</td>
                             <td>@row.Status</td>
+                            <td class="actions-col">
+                                @if (row.Status == "Finished")
+                                {
+                                    if (adjustingRiderIds.Contains(row.RiderId))
+                                    {
+                                        <span class="muted">Updating…</span>
+                                    }
+                                    else if (!credentialState.IsAuthenticated)
+                                    {
+                                        <span class="muted">Sign in to adjust</span>
+                                    }
+                                    else
+                                    {
+                                        <div style="display:flex; align-items:center;">
+                                            <button class="secondary-action tiny-action" type="button" @onclick="MakeAdjuster(row.RiderId, -1)">-1m</button>
+                                            <button class="secondary-action tiny-action" type="button" @onclick="MakeAdjuster(row.RiderId, 1)">+1m</button>
+                                        </div>
+                                    }
+                                }
+                                else
+                                {
+                                    <span>-</span>
+                                }
+                            </td>
                         </tr>
                     }
                 </tbody>
@@ -203,6 +228,62 @@
         finally
         {
             isResetting = false;
+        }
+    }
+
+    private Func<Task> MakeAdjuster(string riderId, int delta) => () => AdjustFinishedTimeAsync(riderId, delta);
+
+    private HashSet<string> adjustingRiderIds = new();
+
+    private async Task AdjustFinishedTimeAsync(string riderId, int deltaMinutes)
+    {
+        if (!credentialState.IsAuthenticated)
+        {
+            statusMessage = "Sign in as an official to adjust timings.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(credentialState.Pin))
+        {
+            statusMessage = "Please re-enter your PIN in the sign-in modal before adjusting times.";
+            return;
+        }
+
+        adjustingRiderIds.Add(riderId);
+        try
+        {
+            var currentEvent = await ApiClient.GetCurrentEventAsync();
+            var eventCode = currentEvent?.EventCode ?? string.Empty;
+            var req = new AdjustTimingRequest(eventCode, credentialState.OfficialName, credentialState.Pin, riderId, deltaMinutes);
+            try { await JsRuntime.InvokeVoidAsync("console.log", "AdjustFinishedTime:request", req); } catch { }
+            var result = await ApiClient.AdjustTimingAsync(req);
+            try { await JsRuntime.InvokeVoidAsync("console.log", "AdjustFinishedTime:result", result); } catch { }
+            if (result is not null)
+            {
+                if (result.Success)
+                {
+                    await LoadAsync();
+                    statusMessage = result.Message;
+                }
+                else
+                {
+                    statusMessage = result.Message;
+                }
+            }
+            else
+            {
+                statusMessage = "Adjust failed. Check the API and try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            try { await JsRuntime.InvokeVoidAsync("console.error", "AdjustFinishedTime:error", ex.ToString()); } catch { }
+            statusMessage = "Unable to adjust — API not reachable.";
+        }
+        finally
+        {
+            adjustingRiderIds.Remove(riderId);
+            await InvokeAsync(StateHasChanged);
         }
     }
 }
